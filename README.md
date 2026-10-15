@@ -43,14 +43,14 @@ Then in your vimrc / init.vim:
 
 ```vim
 set completeopt=menuone,noinsert,noselect
-autocmd VimEnter * GodaCmpEnable
+autocmd VimEnter * call goda_cmp#enable()
 inoremap <C-n> <Cmd>call goda_cmp#complete()<CR>
 ```
 
-`:GodaCmpBuild` runs `go build` in the config directory and writes the binary
+`goda_cmp#build()` runs `go build` in the config directory and writes the binary
 next to it (`g:goda_cmp_binary` to put it elsewhere). Rebuild after editing
 the config or updating an extension; then restart the editor (or
-`:GodaCmpDisable` / `:GodaCmpEnable`).
+`goda_cmp#disable()` / `goda_cmp#enable()`).
 
 ## Configuration
 

@@ -1,5 +1,5 @@
 // Command config is a user's goda-cmp configuration: an ordinary Go program.
-// Build it with :GodaCmpBuild (or go build) and goda-cmp.vim runs the result.
+// Build it with :call goda_cmp#build() (or go build) and goda-cmp.vim runs the result.
 //
 // It is the counterpart of a ddc.ts: extensions are imported (and so type
 // checked and completed by your editor), and configured with PatchGlobal and

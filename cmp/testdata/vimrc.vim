@@ -31,4 +31,4 @@ function! DumpPopup() abort
 endfunction
 inoremap <C-]> <Cmd>call DumpPopup()<CR>
 
-autocmd VimEnter * GodaCmpEnable
+autocmd VimEnter * call goda_cmp#enable()
