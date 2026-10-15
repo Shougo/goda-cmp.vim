@@ -1,0 +1,120 @@
+package cmp_test
+
+import (
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+)
+
+type dump struct {
+	Visible bool     `json:"visible"`
+	Words   []string `json:"words"`
+	Line    string   `json:"line"`
+}
+
+// TestRealVim types into an actual Vim (in a pseudo terminal) with a binary
+// built from examples/config and checks what the popup shows. GODA_CMP_PUM
+// may name a checkout of pum.vim to run the same scenario with the pum UI.
+func TestRealVim(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts Vim")
+	}
+	vimBin, err := exec.LookPath("vim")
+	if err != nil {
+		t.Skip("vim is not installed")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	ver, _ := exec.Command(vimBin, "--version").Output()
+	if !strings.Contains(string(ver), "+job") || !strings.Contains(string(ver), "+channel") || !strings.Contains(string(ver), "+timers") {
+		t.Skip("this vim lacks +job/+channel/+timers")
+	}
+
+	repo, _ := filepath.Abs("..")
+	godaRoot, _ := filepath.Abs("../../goda.vim")
+	if _, err := os.Stat(godaRoot); err != nil {
+		t.Skip("goda.vim is not next to goda-cmp.vim")
+	}
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "goda-cmp")
+	build := exec.Command("go", "build", "-o", bin, ".")
+	build.Dir = filepath.Join(repo, "examples", "config")
+	build.Env = append(os.Environ(), "CGO_ENABLED=0")
+	if b, err := build.CombinedOutput(); err != nil {
+		t.Fatalf("building examples/config: %v\n%s", err, b)
+	}
+
+	text := filepath.Join(dir, "text.txt")
+	if err := os.WriteFile(text, []byte("foobar\nfoo_baz\nfoobarbaz\nzzz\n\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	run := func(t *testing.T, pumDir string) []dump {
+		out := filepath.Join(dir, "out-"+strings.ReplaceAll(t.Name(), "/", "-")+".jsonl")
+		steps := `[
+		  ["Go", 0.3],
+		  ["fo", 1.0], ["\u001d", 0.3],
+		  ["o", 1.0],  ["\u001d", 0.3],
+		  ["b", 1.0],  ["\u001d", 0.3],
+		  ["\u001b", 0.5],
+		  ["o", 0.3], ["qq", 1.0], ["\u001d", 0.3],
+		  ["\u001b", 0.3]
+		]`
+		cmd := exec.Command("python3", "-I", "testdata/drive.py", vimBin, "testdata/vimrc.vim", text, steps)
+		cmd.Env = append(os.Environ(),
+			"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
+			"PUM_RTP="+pumDir)
+		if pumDir != "" {
+			cmd.Env = append(cmd.Env, "GODA_CMP_UI=pum")
+		}
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("driver: %v\n%s", err, b)
+		}
+		raw, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatalf("Vim recorded nothing: %v", err)
+		}
+		var ds []dump
+		for _, l := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+			var d dump
+			if err := json.Unmarshal([]byte(l), &d); err != nil {
+				t.Fatalf("bad record %q: %v", l, err)
+			}
+			ds = append(ds, d)
+		}
+		t.Logf("records: %+v", ds)
+		return ds
+	}
+
+	check := func(t *testing.T, ds []dump) {
+		want := []dump{
+			{true, []string{"foobar", "foo_baz", "foobarbaz"}, "fo"},
+			{true, []string{"foobar", "foo_baz", "foobarbaz"}, "foo"},
+			{true, []string{"foobar", "foobarbaz"}, "foob"},
+			{false, nil, "qq"}, // nothing in the buffer starts with qq
+		}
+		if len(ds) != len(want) {
+			t.Fatalf("got %d records, want %d", len(ds), len(want))
+		}
+		for i, w := range want {
+			g := ds[i]
+			if g.Visible != w.Visible || (len(g.Words)+len(w.Words) > 0 && !reflect.DeepEqual(g.Words, w.Words)) || g.Line != w.Line {
+				t.Errorf("record %d:\n got %+v\nwant %+v", i, g, w)
+			}
+		}
+	}
+
+	t.Run("native", func(t *testing.T) { check(t, run(t, "")) })
+	// The stand-in checks that the pum UI calls pum#open(startcol, items)
+	// with the right items; it cannot check how pum.vim draws them.
+	fake, _ := filepath.Abs("testdata/fakepum")
+	t.Run("pum-with-stand-in", func(t *testing.T) { check(t, run(t, fake)) })
+	if pum := os.Getenv("GODA_CMP_PUM"); pum != "" {
+		t.Run("pum", func(t *testing.T) { check(t, run(t, pum)) })
+	}
+}

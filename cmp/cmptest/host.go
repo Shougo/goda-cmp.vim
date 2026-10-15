@@ -1,0 +1,81 @@
+// Package cmptest provides a fake editor for testing sources, filters and UIs
+// without Vim.
+package cmptest
+
+import (
+	"context"
+	"fmt"
+	"sync"
+
+	"github.com/Shougo/goda.vim/sdk"
+)
+
+// Call is one recorded Host.Call.
+type Call struct {
+	Fn   string
+	Args []any
+}
+
+// Host is an sdk.Host whose Vim functions are Go functions.
+type Host struct {
+	// Funcs maps a Vim function name to its fake. A call to a missing name
+	// fails like E117 does.
+	Funcs map[string]func(args ...any) (any, error)
+
+	mu    sync.Mutex
+	calls []Call
+}
+
+func (h *Host) Meta() sdk.Meta { return sdk.Meta{Host: sdk.HostVim} }
+
+func (h *Host) Call(_ context.Context, fn string, args ...any) (any, error) {
+	h.mu.Lock()
+	h.calls = append(h.calls, Call{fn, args})
+	f := h.Funcs[fn]
+	h.mu.Unlock()
+	if f == nil {
+		return nil, fmt.Errorf("E117: Unknown function: %s", fn)
+	}
+	return f(args...)
+}
+
+func (h *Host) Eval(context.Context, string) (any, error) { return nil, fmt.Errorf("cmptest: Eval") }
+func (h *Host) Cmd(context.Context, string) error         { return fmt.Errorf("cmptest: Cmd") }
+
+// Calls returns what was called so far.
+func (h *Host) Calls() []Call {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return append([]Call(nil), h.calls...)
+}
+
+// Lines makes a Host whose getbufline returns the given lines, honouring the
+// first/last arguments like Vim does.
+func Lines(lines ...string) *Host {
+	return &Host{Funcs: map[string]func(...any) (any, error){
+		"getbufline": func(a ...any) (any, error) {
+			first, last := toInt(a[1]), toInt(a[2])
+			if first < 1 {
+				first = 1
+			}
+			if last > len(lines) {
+				last = len(lines)
+			}
+			out := []any{}
+			for i := first; i <= last; i++ {
+				out = append(out, lines[i-1])
+			}
+			return out, nil
+		},
+	}}
+}
+
+func toInt(v any) int {
+	switch n := v.(type) {
+	case int:
+		return n
+	case int64:
+		return int(n)
+	}
+	return 0
+}
