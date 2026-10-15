@@ -42,8 +42,31 @@ func TestRealVim(t *testing.T) {
 	}
 	dir := t.TempDir()
 	bin := filepath.Join(dir, "goda-cmp")
+	// examples/config has no replace directives (it is written the way a
+	// user's module is), so build a copy that resolves both modules to the
+	// local checkouts.
+	cfgDir := filepath.Join(dir, "config")
+	if err := os.Mkdir(cfgDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"main.go", "config.go"} {
+		b, err := os.ReadFile(filepath.Join(repo, "examples", "config", f))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(cfgDir, f), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	gomod := "module goda-cmp-config\n\ngo 1.24\n\n" +
+		"require (\n\tgithub.com/Shougo/goda-cmp.vim v0.0.0\n\tgithub.com/Shougo/goda.vim v0.0.0\n)\n\n" +
+		"replace github.com/Shougo/goda-cmp.vim => " + repo + "\n" +
+		"replace github.com/Shougo/goda.vim => " + godaRoot + "\n"
+	if err := os.WriteFile(filepath.Join(cfgDir, "go.mod"), []byte(gomod), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = filepath.Join(repo, "examples", "config")
+	build.Dir = cfgDir
 	build.Env = append(os.Environ(), "CGO_ENABLED=0")
 	if b, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("building examples/config: %v\n%s", err, b)

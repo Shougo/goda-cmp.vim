@@ -157,7 +157,7 @@ func (b *Builder) Plugin() (sdk.Plugin, error) {
 
 // Main runs the plugin as the whole program: the last line of a config.go
 // main function. A configuration error ends the program with a message in the
-// plugin log (:GodaLog).
+// plugin log (echo goda#log()).
 func (b *Builder) Main() {
 	p, err := b.Plugin()
 	if err != nil {

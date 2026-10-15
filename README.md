@@ -76,7 +76,7 @@ b.Main()
 Patches merge field by field: unset fields keep the previous value, maps are
 merged by key, slices are replaced. Options named `"_"` are inherited by every
 source. A name used in the configuration but never added (a typo) is reported
-when the binary starts (`:GodaLog`).
+when the binary starts (`echo goda#log()`).
 
 Settings: `UI`, `Sources`, `SourceOptions` (`Mark`, `MinAutoCompleteLength`,
 `MaxItems`, `Matchers`, `Sorters`, `Converters`), `PostFilters`,
