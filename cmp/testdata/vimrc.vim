@@ -2,7 +2,7 @@
 set nocompatible noswapfile nobackup nowritebackup ttimeout ttimeoutlen=10
 set completeopt=menuone,noinsert,noselect
 let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . (empty($PUM_RTP) ? '' : ',' . $PUM_RTP) . ',' . &runtimepath
-let g:goda_cmp_binary = $GODA_CMP_BIN
+let g:goda_cmp#binary = $GODA_CMP_BIN
 filetype plugin on
 
 " Ctrl-] in insert mode records what the popup shows.

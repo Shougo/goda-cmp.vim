@@ -15,9 +15,13 @@ or Neovim.
 **1. Install the plugins** with your plugin manager: `Shougo/goda.vim` and
 `Shougo/goda-cmp.vim`; add `Shougo/pum.vim` if you want the pum popup.
 
-**2. Create your configuration**, a small Go module. The default place is
+**2. Create your configuration**, a small Go module of your own: `main.go`,
+`config.go`, `go.mod` and `go.sum`. They are yours, not part of this
+repository, so keep them with the rest of your editor configuration (in your
+dotfiles repository) and commit them there. The default place is
 `~/.vim/goda-cmp` for Vim and `stdpath('config') . '/goda-cmp'`
-(`~/.config/nvim/goda-cmp`) for Neovim; `g:goda_cmp_config_dir` overrides it.
+(`~/.config/nvim/goda-cmp`) for Neovim; set `g:goda_cmp#config_dir` to use
+another directory, such as one in your dotfiles that you link to.
 
 ```sh
 mkdir -p ~/.vim/goda-cmp && cd ~/.vim/goda-cmp        # Neovim: ~/.config/nvim/goda-cmp
@@ -27,7 +31,12 @@ go get github.com/Shougo/goda-cmp.vim@latest
 go mod tidy
 ```
 
-(While the code is on a branch, replace `@latest` with `@wip` or the branch name.)
+(`examples/config` is only a template to copy from. Do not edit it in place.)
+
+The built binary is not put there: it depends on your machine, so it goes to
+a cache directory (`stdpath('cache')/goda-cmp` on Neovim, `~/.cache/vim/goda-cmp`
+on Vim; `g:goda_cmp#binary` sets the file). Nothing in your configuration
+directory needs to be ignored by git.
 
 **3. Add this to your vimrc / init.vim:**
 
@@ -49,17 +58,18 @@ Open a file, go into insert mode and type: words of the buffer are offered.
 If nothing appears, `:echo goda#log()` shows what the plugin said, and
 `:echo goda#plugins()` should list `cmp`.
 
-The binary is written next to the configuration (`g:goda_cmp_binary` to put it
-elsewhere) and has to be built again after you edit `main.go` or `config.go`,
-or update goda.vim, goda-cmp.vim or an extension (`go get -u`, then rebuild).
-`goda_cmp#rebuild()` stops, builds and starts again; for example
+The binary has to be built again after you edit `main.go` or `config.go`, or
+update goda.vim, goda-cmp.vim or an extension (`go get -u`, then build). Run
+`goda_cmp#build()` again: if completion is running it is stopped, rebuilt and
+started again with the new binary; if the build fails, you get the error and
+the previous binary is started again. To do it whenever you save the configuration:
 
 ```vim
-autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#rebuild()
+autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#build()
 ```
 
 If a build leaves you with a "protocol" error, the binary and the Vim script
-come from different versions of goda.vim: rebuild.
+come from different versions of goda.vim: run `goda_cmp#build()` again.
 
 To use pum.vim: `call goda_cmp#patch_global({'ui': 'pum'})` (or `UI: "pum"` in
 `config.go`) and configure pum.vim as usual (`pum#set_option`, `pum#map#...`).

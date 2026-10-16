@@ -18,36 +18,60 @@ let s:filetype_patch = {}
 " ---------------------------------------------------------------------------
 " Setup
 
+" The binary is machine specific, so it is not built into the configuration
+" directory (which belongs in your dotfiles) but into a cache directory.
+function! s:cache_dir() abort
+  if has('nvim')
+    let l:base = stdpath('cache')
+  elseif !empty($XDG_CACHE_HOME)
+    let l:base = $XDG_CACHE_HOME . '/vim'
+  elseif has('win32') && !empty($LOCALAPPDATA)
+    let l:base = $LOCALAPPDATA . '/vim'
+  else
+    let l:base = expand('~/.cache/vim')
+  endif
+  return l:base . '/goda-cmp'
+endfunction
+
 function! s:default_bin() abort
-  return get(g:, 'goda_cmp_binary', s:config_dir() . '/goda-cmp' . (has('win32') ? '.exe' : ''))
+  if exists('g:goda_cmp#binary')
+    return expand(g:goda_cmp#binary)
+  endif
+  return s:cache_dir() . '/goda-cmp' . (has('win32') ? '.exe' : '')
 endfunction
 
 function! s:config_dir() abort
-  if exists('g:goda_cmp_config_dir')
-    return expand(g:goda_cmp_config_dir)
+  if exists('g:goda_cmp#config_dir')
+    return expand(g:goda_cmp#config_dir)
   endif
   return (has('nvim') ? stdpath('config') : expand('~/.vim')) . '/goda-cmp'
 endfunction
 
-" Build the user's config (a Go module in g:goda_cmp_config_dir). Needs Go.
+" Build the user's config (a Go module in g:goda_cmp#config_dir). Needs Go.
+"
+" If completion is running it is stopped first and started again afterwards
+" with the new binary, so this is also what to run after the configuration or
+" an extension changed (see the README for an autocmd). When the build fails,
+" the previous binary keeps running.
 function! goda_cmp#build() abort
   let l:dir = s:config_dir()
   if !isdirectory(l:dir)
     throw 'goda-cmp: no config directory: ' . l:dir
   endif
-  let l:out = system('cd ' . shellescape(l:dir) . ' && go build -o ' . shellescape(s:default_bin()) . ' .')
-  if v:shell_error
+  let l:bin = s:default_bin()
+  call mkdir(fnamemodify(l:bin, ':h'), 'p')
+
+  let l:was_enabled = exists('s:enabled')
+  call goda_cmp#disable()
+  let l:out = system('cd ' . shellescape(l:dir) . ' && go build -o ' . shellescape(l:bin) . ' .')
+  let l:failed = v:shell_error
+  if l:was_enabled
+    call goda_cmp#enable()
+  endif
+  if l:failed
     throw 'goda-cmp: go build failed:' . "\n" . l:out
   endif
-  echomsg 'goda-cmp: built ' . s:default_bin()
-endfunction
-
-" Stop, build and start again: what to run after the config or an extension
-" changed. Meant for an autocmd, see the README.
-function! goda_cmp#rebuild() abort
-  call goda_cmp#disable()
-  call goda_cmp#build()
-  call goda_cmp#enable()
+  echomsg 'goda-cmp: built ' . l:bin
 endfunction
 
 " Start the plugin binary and begin completing in insert mode.
