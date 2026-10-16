@@ -31,4 +31,35 @@ function! DumpPopup() abort
 endfunction
 inoremap <C-]> <Cmd>call DumpPopup()<CR>
 
+" The pum scenario switches the popup from Vim script.
+if !empty($PUM_RTP)
+  call goda_cmp#patch_global({'ui': 'pum'})
+endif
 autocmd VimEnter * call goda_cmp#enable()
+
+" Run-time settings, as in a ddc.vim configuration that patches the buffer
+" while the command line is used: Ctrl-G switches the sources off for this
+" buffer, Ctrl-T puts the previous settings back, Ctrl-Y tries an invalid patch
+" and records the error.
+function! PatchOff() abort
+  let g:prev_config = goda_cmp#get_buffer()
+  call goda_cmp#patch_buffer({'sources': []})
+  return ''
+endfunction
+function! PatchRestore() abort
+  call goda_cmp#set_buffer(g:prev_config)
+  return ''
+endfunction
+function! PatchBad() abort
+  try
+    call goda_cmp#patch_buffer({'sources': ['no_such_source']})
+    let l:err = 'no error'
+  catch
+    let l:err = v:exception
+  endtry
+  call writefile([json_encode({'error': l:err, 'buffer': goda_cmp#get_buffer()})], $GODA_OUT, 'a')
+  return ''
+endfunction
+inoremap <C-g> <Cmd>call PatchOff()<CR>
+inoremap <C-t> <Cmd>call PatchRestore()<CR>
+inoremap <C-y> <Cmd>call PatchBad()<CR>

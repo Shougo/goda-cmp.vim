@@ -3,13 +3,11 @@ package main
 import "github.com/Shougo/goda-cmp.vim/cmp"
 
 // configure holds the settings, like the patchGlobal calls of a ddc.ts.
-// ui overrides the popup ("native" or "pum") when it is not empty.
-func configure(b *cmp.Builder, ui string) {
-	if ui == "" {
-		ui = "native"
-	}
+// The settings can also be changed from Vim script at any time, for example
+// goda_cmp#patch_global({'ui': 'pum'}); see the README.
+func configure(b *cmp.Builder) {
 	b.PatchGlobal(cmp.Config{
-		UI:      ui, // "native" or "pum"
+		UI:      "native", // "native" or "pum"
 		Sources: []string{"around"},
 		SourceOptions: map[string]cmp.SourceOption{
 			"_": {

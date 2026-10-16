@@ -74,9 +74,21 @@ func (e *engine) gatherOne(ctx context.Context, h sdk.Host, c *Context, cfg Conf
 	src := e.b.sources[name]
 	opt := cfg.sourceOption(name)
 
+	// Each source sees the context with its own keyword pattern.
+	sc := *c
+	if opt.KeywordPattern != "" {
+		re, err := e.keyword(opt.KeywordPattern)
+		if err != nil {
+			log.Printf("cmp: source %s: %v", name, err)
+			res.err = err
+			return res
+		}
+		sc.keyword = re
+	}
+
 	sctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
-	g, err := sdk.Guard(sctx, func() (Gathered, error) { return src.Gather(sctx, h, c) })
+	g, err := sdk.Guard(sctx, func() (Gathered, error) { return src.Gather(sctx, h, &sc) })
 	if err != nil {
 		if ctx.Err() == nil { // a superseded request is not worth a log line
 			log.Printf("cmp: source %s: %v", name, err)

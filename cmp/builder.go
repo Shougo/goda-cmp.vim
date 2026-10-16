@@ -90,58 +90,73 @@ func (b *Builder) PatchFiletypes(filetypes []string, c Config) *Builder {
 	return b
 }
 
-// resolve is the configuration for a filetype. A dotted filetype such as
-// "cpp.doxygen" applies the patches of each part in order.
-func (b *Builder) resolve(filetype string) Config {
-	cfg := b.global
+// resolve is the configuration for a filetype and the run-time patches: the
+// Go settings and the Vim-side settings of each scope, from the widest scope
+// (global) to the narrowest (buffer). A dotted filetype such as "cpp.doxygen"
+// applies the patches of each part in order.
+func (b *Builder) resolve(filetype string, rt Patches) Config {
+	cfg := merge(b.global, rt.Global)
 	for _, part := range strings.Split(filetype, ".") {
 		if p, ok := b.ft[part]; ok {
 			cfg = merge(cfg, p)
 		}
+		if p, ok := rt.Filetype[part]; ok {
+			cfg = merge(cfg, p)
+		}
 	}
-	return cfg
+	return merge(cfg, rt.Buffer)
 }
 
-// Validate reports every name the configuration uses that was never added.
+// checkConfig lists the problems of one configuration: names that were never
+// added and keyword patterns that do not compile.
+func (b *Builder) checkConfig(where string, cfg Config) []string {
+	var errs []string
+	if cfg.UI != "" {
+		if _, ok := b.uis[cfg.UI]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: unknown ui %q", where, cfg.UI))
+		}
+	}
+	for _, s := range cfg.Sources {
+		if _, ok := b.sources[s]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: unknown source %q", where, s))
+		}
+	}
+	for _, f := range cfg.PostFilters {
+		if _, ok := b.filters[f]; !ok {
+			errs = append(errs, fmt.Sprintf("%s: unknown filter %q in postFilters", where, f))
+		}
+	}
+	for name, o := range cfg.SourceOptions {
+		if name != "_" {
+			if _, ok := b.sources[name]; !ok {
+				errs = append(errs, fmt.Sprintf("%s: sourceOptions for unknown source %q", where, name))
+			}
+		}
+		for _, list := range [][]string{o.Matchers, o.Sorters, o.Converters} {
+			for _, f := range list {
+				if _, ok := b.filters[f]; !ok {
+					errs = append(errs, fmt.Sprintf("%s: source %q uses unknown filter %q", where, name, f))
+				}
+			}
+		}
+		if o.KeywordPattern != "" {
+			if _, err := keywordRegexp(o.KeywordPattern); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: source %q: %v", where, name, err))
+			}
+		}
+	}
+	return errs
+}
+
+// Validate reports every problem of the configuration made in Go.
 func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
-	check := func(where string, cfg Config) {
-		if cfg.UI != "" {
-			if _, ok := b.uis[cfg.UI]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: unknown ui %q", where, cfg.UI))
-			}
-		}
-		for _, s := range cfg.Sources {
-			if _, ok := b.sources[s]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: unknown source %q", where, s))
-			}
-		}
-		for _, f := range cfg.PostFilters {
-			if _, ok := b.filters[f]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: unknown filter %q in postFilters", where, f))
-			}
-		}
-		for name, o := range cfg.SourceOptions {
-			if name != "_" {
-				if _, ok := b.sources[name]; !ok {
-					errs = append(errs, fmt.Sprintf("%s: sourceOptions for unknown source %q", where, name))
-				}
-			}
-			for _, list := range [][]string{o.Matchers, o.Sorters, o.Converters} {
-				for _, f := range list {
-					if _, ok := b.filters[f]; !ok {
-						errs = append(errs, fmt.Sprintf("%s: source %q uses unknown filter %q", where, name, f))
-					}
-				}
-			}
-		}
-	}
-	check("global", b.global)
+	errs = append(errs, b.checkConfig("global", b.global)...)
 	for ft, c := range b.ft {
-		check("filetype "+ft, c)
+		errs = append(errs, b.checkConfig("filetype "+ft, c)...)
 	}
 	if len(errs) > 0 {
-		return fmt.Errorf("goda-cmp configuration:\n  %s", strings.Join(errs, "\n  "))
+		return fmt.Errorf("goda-cmp configuration:\n  %s", joinErrs(errs))
 	}
 	return nil
 }

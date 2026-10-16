@@ -1,6 +1,16 @@
 package cmp
 
-import "time"
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+
+	"github.com/Shougo/goda.vim/sdk"
+)
 
 // Ptr returns a pointer to v. Config uses pointers where the zero value is a
 // meaningful setting: cmp.Ptr(0).
@@ -13,41 +23,71 @@ func Ptr[T any](v T) *T { return &v }
 // inherited one.
 type SourceOption struct {
 	// Mark is shown in the menu column of items that have none.
-	Mark string
+	Mark string `json:"mark"`
 	// MinAutoCompleteLength: shorter words do not trigger this source
 	// automatically (default 1).
-	MinAutoCompleteLength *int
+	MinAutoCompleteLength *int `json:"minAutoCompleteLength"`
 	// MaxItems caps the items of this source after sorting (default 100,
 	// 0 = unlimited).
-	MaxItems *int
+	MaxItems *int `json:"maxItems"`
+	// KeywordPattern is a regular expression (Go's RE2 syntax: no lookaround)
+	// for the text before the cursor that is completed; the match must end
+	// at the cursor. Empty means letters, digits and underscores.
+	KeywordPattern string `json:"keywordPattern"`
 
-	Matchers   []string
-	Sorters    []string
-	Converters []string
+	Matchers   []string `json:"matchers"`
+	Sorters    []string `json:"sorters"`
+	Converters []string `json:"converters"`
+}
+
+// DynamicSourcesArgs is the input of Config.DynamicSources.
+type DynamicSourcesArgs struct {
+	Context *Context
+	// Sources are the sources the configuration enables.
+	Sources []string
+}
+
+// DynamicUIArgs is the input of Config.DynamicUI.
+type DynamicUIArgs struct {
+	Context *Context
+	Items   []Item
 }
 
 // Config is both the effective configuration and a patch: PatchGlobal and
-// PatchFiletype merge a Config into what is there, field by field, in the
-// way ddc#custom#patch_global does. Unset fields (zero value, nil) keep the
-// previous setting; maps are merged by key; slices are replaced.
+// PatchFiletype (and the Vim-side goda_cmp#patch_*) merge a Config into what
+// is there, field by field, in the way ddc#custom#patch_global does. Unset
+// fields (zero value, nil) keep the previous setting; maps are merged by key;
+// slices are replaced.
+//
+// The JSON names are the ones ddc.vim uses, since the Vim side sends patches as
+// dictionaries. Unknown keys are an error. The two functions cannot come from
+// Vim script; they are set in Go only.
 type Config struct {
 	// UI is "native" or "pum", or the name of a UI added to the builder.
-	UI string
+	UI string `json:"ui"`
 	// Sources lists the enabled sources in order.
-	Sources       []string
-	SourceOptions map[string]SourceOption
+	Sources       []string                `json:"sources"`
+	SourceOptions map[string]SourceOption `json:"sourceOptions"`
 	// PostFilters run on the merged list of all sources.
-	PostFilters []string
+	PostFilters []string `json:"postFilters"`
 
 	// AutoCompleteDelay is the debounce time in milliseconds before a
 	// request is sent after typing (default 0). nil keeps the previous
 	// value.
-	AutoCompleteDelay *int
+	AutoCompleteDelay *int `json:"autoCompleteDelay"`
 	// AutoComplete turns completion while typing on or off (default on).
-	AutoComplete *bool
+	AutoComplete *bool `json:"autoComplete"`
 	// SourceTimeout bounds every source and filter, in milliseconds
 	// (default 2000).
-	SourceTimeout *int
+	SourceTimeout *int `json:"sourceTimeout"`
+
+	// DynamicSources, when set, may replace the list of sources for one
+	// request, deciding with the help of the editor (h). Returning nil keeps
+	// the list.
+	DynamicSources func(ctx context.Context, h sdk.Host, a DynamicSourcesArgs) ([]string, error) `json:"-"`
+	// DynamicUI, when set, may choose the UI for one request after the items
+	// are known. Returning "" keeps Config.UI.
+	DynamicUI func(ctx context.Context, h sdk.Host, a DynamicUIArgs) (string, error) `json:"-"`
 }
 
 func defaultConfig() Config {
@@ -86,6 +126,12 @@ func merge(base, p Config) Config {
 	if p.SourceTimeout != nil {
 		out.SourceTimeout = p.SourceTimeout
 	}
+	if p.DynamicSources != nil {
+		out.DynamicSources = p.DynamicSources
+	}
+	if p.DynamicUI != nil {
+		out.DynamicUI = p.DynamicUI
+	}
 	out.SourceOptions = make(map[string]SourceOption, len(base.SourceOptions)+len(p.SourceOptions))
 	for k, v := range base.SourceOptions {
 		out.SourceOptions[k] = v
@@ -106,6 +152,9 @@ func mergeOption(base, p SourceOption) SourceOption {
 	}
 	if p.MaxItems != nil {
 		out.MaxItems = p.MaxItems
+	}
+	if p.KeywordPattern != "" {
+		out.KeywordPattern = p.KeywordPattern
 	}
 	if p.Matchers != nil {
 		out.Matchers = p.Matchers
@@ -137,3 +186,78 @@ func deref[T any](p *T, def T) T {
 	}
 	return *p
 }
+
+// keywordRegexp compiles a keywordPattern so that it must end at the cursor.
+func keywordRegexp(pattern string) (*regexp.Regexp, error) {
+	re, err := regexp.Compile("(?:" + pattern + ")$")
+	if err != nil {
+		return nil, fmt.Errorf("keywordPattern %q: %w", pattern, err)
+	}
+	return re, nil
+}
+
+// decodeConfig reads a patch sent by the editor. Unknown keys and wrongly
+// typed values are errors, so that a typo is reported instead of ignored.
+func decodeConfig(v any) (Config, error) {
+	var c Config
+	if v == nil {
+		return c, nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return c, err
+	}
+	dec := json.NewDecoder(bytes.NewReader(b))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&c); err != nil {
+		return Config{}, fmt.Errorf("config: %w", err)
+	}
+	return c, nil
+}
+
+// Patches are the settings made at run time from Vim script, which the editor
+// sends with every request: {global, filetype: {ft: patch}, buffer}.
+type Patches struct {
+	Global   Config
+	Filetype map[string]Config
+	Buffer   Config
+}
+
+func decodePatches(v any) (Patches, error) {
+	var p Patches
+	if v == nil {
+		return p, nil
+	}
+	m, ok := v.(map[string]any)
+	if !ok {
+		return p, fmt.Errorf("patches must be a dictionary, got %T", v)
+	}
+	var err error
+	for k, val := range m {
+		switch k {
+		case "global":
+			p.Global, err = decodeConfig(val)
+		case "buffer":
+			p.Buffer, err = decodeConfig(val)
+		case "filetype":
+			fts, ok := val.(map[string]any)
+			if !ok {
+				return p, fmt.Errorf("patches.filetype must be a dictionary")
+			}
+			p.Filetype = map[string]Config{}
+			for ft, c := range fts {
+				if p.Filetype[ft], err = decodeConfig(c); err != nil {
+					return p, fmt.Errorf("filetype %s: %w", ft, err)
+				}
+			}
+		default:
+			return p, fmt.Errorf("patches: unknown key %q", k)
+		}
+		if err != nil {
+			return p, fmt.Errorf("%s: %w", k, err)
+		}
+	}
+	return p, nil
+}
+
+func joinErrs(errs []string) string { return strings.Join(errs, "\n  ") }

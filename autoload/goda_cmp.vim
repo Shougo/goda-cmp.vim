@@ -7,7 +7,13 @@
 let s:seq = 0
 let s:timer = -1
 let s:last = []        " [bufnr, lnum, input] of the last request
-let s:opts = {}        " per filetype: answer of cmp.options
+let s:opts = {}        " answers of cmp.options, by filetype and patches
+
+" Settings made at run time. They live here, not in the plugin binary: they
+" survive a restart of the binary, buffer settings go away with the buffer, and
+" they can be made before the binary is started. Every request carries them.
+let s:global_patch = {}
+let s:filetype_patch = {}
 
 " ---------------------------------------------------------------------------
 " Setup
@@ -36,19 +42,37 @@ function! goda_cmp#build() abort
   echomsg 'goda-cmp: built ' . s:default_bin()
 endfunction
 
+" Stop, build and start again: what to run after the config or an extension
+" changed. Meant for an autocmd, see the README.
+function! goda_cmp#rebuild() abort
+  call goda_cmp#disable()
+  call goda_cmp#build()
+  call goda_cmp#enable()
+endfunction
+
 " Start the plugin binary and begin completing in insert mode.
 function! goda_cmp#enable() abort
   if exists('s:enabled')
     return
   endif
+  if !executable(s:default_bin())
+    " Not an error: this is what the first start looks like.
+    echohl WarningMsg
+    echomsg 'goda-cmp: ' . s:default_bin() . ' does not exist yet; build it with: call goda_cmp#build()'
+    echohl None
+    return
+  endif
   call goda#start(s:default_bin())
+  if !goda#is_running('cmp')
+    call goda#stop()
+    throw 'goda-cmp: ' . s:default_bin() . ' does not contain the "cmp" plugin'
+  endif
   let s:enabled = 1
   augroup goda_cmp
     autocmd!
     autocmd TextChangedI * call s:on_change('TextChangedI')
     autocmd TextChangedP * call s:on_change('TextChangedP')
     autocmd InsertLeave * call goda_cmp#hide()
-    autocmd BufEnter,FileType * let s:opts = {}
   augroup END
 endfunction
 
@@ -59,22 +83,110 @@ function! goda_cmp#disable() abort
   unlet s:enabled
   silent! autocmd! goda_cmp
   call goda_cmp#hide()
-  call goda#stop()
+  call goda#stop('cmp')
+endfunction
+
+" ---------------------------------------------------------------------------
+" Requests
+
+" ---------------------------------------------------------------------------
+" Settings (ddc.vim: ddc#custom#patch_*). A patch is a dictionary with the
+" keys of cmp.Config (ui, sources, sourceOptions, ...). Maps are merged by
+" key, everything else is replaced. A patch is checked by the plugin when it
+" is running, and an invalid one throws.
+
+function! s:merge(base, patch) abort
+  let l:r = deepcopy(a:base)
+  for [l:key, l:val] in items(a:patch)
+    if l:key ==# 'sourceOptions' && type(l:val) == v:t_dict
+      let l:opts = get(l:r, 'sourceOptions', {})
+      for [l:src, l:opt] in items(l:val)
+        let l:opts[l:src] = extend(get(l:opts, l:src, {}), deepcopy(l:opt))
+      endfor
+      let l:r.sourceOptions = l:opts
+    else
+      let l:r[l:key] = deepcopy(l:val)
+    endif
+  endfor
+  return l:r
+endfunction
+
+function! s:check(config) abort
+  if goda#is_running('cmp')
+    call goda#request('cmp', 'validate', a:config)
+  endif
+endfunction
+
+function! goda_cmp#patch_global(patch) abort
+  call s:check(a:patch)
+  let s:global_patch = s:merge(s:global_patch, a:patch)
+endfunction
+
+function! goda_cmp#patch_filetype(filetype, patch) abort
+  call s:check(a:patch)
+  let s:filetype_patch[a:filetype] = s:merge(get(s:filetype_patch, a:filetype, {}), a:patch)
+endfunction
+
+function! goda_cmp#patch_buffer(patch) abort
+  call s:check(a:patch)
+  let b:goda_cmp_patch = s:merge(get(b:, 'goda_cmp_patch', {}), a:patch)
+endfunction
+
+function! goda_cmp#get_global() abort
+  return deepcopy(s:global_patch)
+endfunction
+
+function! goda_cmp#get_filetype(filetype) abort
+  return deepcopy(get(s:filetype_patch, a:filetype, {}))
+endfunction
+
+function! goda_cmp#get_buffer() abort
+  return deepcopy(get(b:, 'goda_cmp_patch', {}))
+endfunction
+
+function! goda_cmp#set_global(config) abort
+  call s:check(a:config)
+  let s:global_patch = deepcopy(a:config)
+endfunction
+
+function! goda_cmp#set_filetype(filetype, config) abort
+  call s:check(a:config)
+  let s:filetype_patch[a:filetype] = deepcopy(a:config)
+endfunction
+
+function! goda_cmp#set_buffer(config) abort
+  call s:check(a:config)
+  let b:goda_cmp_patch = deepcopy(a:config)
+endfunction
+
+" What the plugin needs to resolve the settings of this buffer.
+function! s:patches() abort
+  let l:fts = {}
+  for l:part in split(&filetype, '\.')
+    if has_key(s:filetype_patch, l:part)
+      let l:fts[l:part] = s:filetype_patch[l:part]
+    endif
+  endfor
+  return {'global': s:global_patch, 'filetype': l:fts, 'buffer': get(b:, 'goda_cmp_patch', {})}
 endfunction
 
 " ---------------------------------------------------------------------------
 " Requests
 
 function! s:options() abort
-  let l:ft = &filetype
-  if !has_key(s:opts, l:ft)
+  let l:patches = s:patches()
+  let l:key = &filetype . "\n" . json_encode(l:patches)
+  if !has_key(s:opts, l:key)
+    if len(s:opts) > 50
+      let s:opts = {}
+    endif
     try
-      let s:opts[l:ft] = goda#request('cmp', 'options', l:ft)
+      let s:opts[l:key] = goda#request('cmp', 'options', &filetype, l:patches)
     catch
       return {'autoComplete': 0, 'delay': 0, 'ui': 'native'}
     endtry
   endif
-  return s:opts[l:ft]
+  return s:opts[l:key]
 endfunction
 
 function! s:context(manual) abort
@@ -87,20 +199,22 @@ function! s:context(manual) abort
         \ 'col': col('.'),
         \ 'input': strpart(getline('.'), 0, col('.') - 1),
         \ 'filetype': &filetype,
+        \ 'mode': 'i',
         \ 'manual': a:manual ? v:true : v:false,
+        \ 'patches': s:patches(),
         \ }
 endfunction
 
 function! s:send(manual) abort
   let s:timer = -1
-  if mode() !~# '^i' || !goda#is_running()
+  if mode() !~# '^i' || !goda#is_running('cmp')
     return
   endif
   call goda#notify('cmp', 'complete', s:context(a:manual))
 endfunction
 
 function! s:on_change(event) abort
-  if !goda#is_running()
+  if !goda#is_running('cmp')
     return
   endif
   let l:opts = s:options()
@@ -141,9 +255,9 @@ function! goda_cmp#hide() abort
     let s:timer = -1
   endif
   let s:last = []
-  if goda#is_running()
+  if goda#is_running('cmp')
     try
-      call goda#notify('cmp', 'hide', &filetype)
+      call goda#notify('cmp', 'hide', &filetype, s:patches())
     catch
     endtry
   endif

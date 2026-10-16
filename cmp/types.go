@@ -16,6 +16,7 @@ package cmp
 
 import (
 	"context"
+	"regexp"
 	"unicode"
 	"unicode/utf8"
 
@@ -38,11 +39,25 @@ type Context struct {
 	// Manual is set when the user asked for completion explicitly; sources
 	// then ignore MinAutoCompleteLength.
 	Manual bool `json:"manual"`
+	// Mode is "i" (insert mode). "c" (command line) is reserved.
+	Mode string `json:"mode"`
+
+	// keyword is the source's keywordPattern, anchored at the end of Input.
+	keyword *regexp.Regexp
 }
 
 // KeywordStart returns the byte offset in Input where the word under the
-// cursor begins (len(Input) when the cursor is not after a word character).
-func (c *Context) KeywordStart() int { return KeywordStart(c.Input) }
+// cursor begins (len(Input) when there is none). It follows the source's
+// keywordPattern option when one is set, and KeywordStart(c.Input) otherwise.
+func (c *Context) KeywordStart() int {
+	if c.keyword == nil {
+		return KeywordStart(c.Input)
+	}
+	if loc := c.keyword.FindStringIndex(c.Input); loc != nil {
+		return loc[0]
+	}
+	return len(c.Input)
+}
 
 // KeywordStart is the default notion of "the word being typed": the longest
 // suffix of input made of letters, digits and underscores.
@@ -134,3 +149,27 @@ type UI interface {
 	Show(ctx context.Context, h sdk.Host, req ShowRequest) error
 	Hide(ctx context.Context, h sdk.Host) error
 }
+
+type namedSource struct {
+	Source
+	name string
+}
+
+func (n namedSource) Name() string { return n.name }
+
+// NamedSource registers s under another name, so that the same source can be
+// added twice with different parameters.
+func NamedSource(name string, s Source) Source { return namedSource{s, name} }
+
+type namedFilter struct {
+	f    Filter
+	name string
+}
+
+func (n namedFilter) Name() string { return n.name }
+func (n namedFilter) Filter(ctx context.Context, in FilterInput) ([]Item, error) {
+	return n.f.Filter(ctx, in)
+}
+
+// NamedFilter is NamedSource for filters.
+func NamedFilter(name string, f Filter) Filter { return namedFilter{f, name} }

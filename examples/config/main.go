@@ -7,8 +7,6 @@
 package main
 
 import (
-	"os"
-
 	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/sorterlength"
@@ -26,6 +24,6 @@ func main() {
 	b.AddFilter(sorterlength.New())
 	b.AddFilter(truncateabbr.New(truncateabbr.Params{MaxWidth: 40}))
 
-	configure(b, os.Getenv("GODA_CMP_UI"))
+	configure(b)
 	b.Main()
 }

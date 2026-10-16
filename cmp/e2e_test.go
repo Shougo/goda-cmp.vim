@@ -14,6 +14,8 @@ type dump struct {
 	Visible bool     `json:"visible"`
 	Words   []string `json:"words"`
 	Line    string   `json:"line"`
+	Error   string   `json:"error"`
+	Buffer  any      `json:"buffer"`
 }
 
 // TestRealVim types into an actual Vim (in a pseudo terminal) with a binary
@@ -86,15 +88,16 @@ func TestRealVim(t *testing.T) {
 		  ["b", 1.0],  ["\u001d", 0.3],
 		  ["\u001b", 0.5],
 		  ["o", 0.3], ["qq", 1.0], ["\u001d", 0.3],
+		  ["\u001b", 0.3],
+		  ["o", 0.3], ["\u0007", 0.3], ["fo", 1.0], ["\u001d", 0.3],
+		  ["\u0014", 0.5], ["o", 1.0], ["\u001d", 0.3],
+		  ["\u0019", 0.3],
 		  ["\u001b", 0.3]
 		]`
 		cmd := exec.Command("python3", "-I", "testdata/drive.py", vimBin, "testdata/vimrc.vim", text, steps)
 		cmd.Env = append(os.Environ(),
 			"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
 			"PUM_RTP="+pumDir)
-		if pumDir != "" {
-			cmd.Env = append(cmd.Env, "GODA_CMP_UI=pum")
-		}
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("driver: %v\n%s", err, b)
 		}
@@ -116,19 +119,31 @@ func TestRealVim(t *testing.T) {
 
 	check := func(t *testing.T, ds []dump) {
 		want := []dump{
-			{true, []string{"foobar", "foo_baz", "foobarbaz"}, "fo"},
-			{true, []string{"foobar", "foo_baz", "foobarbaz"}, "foo"},
-			{true, []string{"foobar", "foobarbaz"}, "foob"},
-			{false, nil, "qq"}, // nothing in the buffer starts with qq
+			{true, []string{"foobar", "foo_baz", "foobarbaz"}, "fo", "", nil},
+			{true, []string{"foobar", "foo_baz", "foobarbaz"}, "foo", "", nil},
+			{true, []string{"foobar", "foobarbaz"}, "foob", "", nil},
+			{false, nil, "qq", "", nil}, // nothing in the buffer starts with qq
+			// Sources switched off for the buffer by a run-time patch.
+			{false, nil, "fo", "", nil},
+			// Put back: completion works again.
+			{true, []string{"foob", "foobar", "foo_baz", "foobarbaz"}, "foo", "", nil},
 		}
-		if len(ds) != len(want) {
-			t.Fatalf("got %d records, want %d", len(ds), len(want))
+		if len(ds) != len(want)+1 {
+			t.Fatalf("got %d records, want %d", len(ds), len(want)+1)
 		}
 		for i, w := range want {
 			g := ds[i]
 			if g.Visible != w.Visible || (len(g.Words)+len(w.Words) > 0 && !reflect.DeepEqual(g.Words, w.Words)) || g.Line != w.Line {
 				t.Errorf("record %d:\n got %+v\nwant %+v", i, g, w)
 			}
+		}
+		// A patch naming an unknown source is refused, and changes nothing.
+		bad := ds[len(want)]
+		if !strings.Contains(bad.Error, "unknown source") {
+			t.Errorf("invalid patch: error = %q, want one about an unknown source", bad.Error)
+		}
+		if m, ok := bad.Buffer.(map[string]any); !ok || len(m) != 0 {
+			t.Errorf("invalid patch changed the buffer settings: %v", bad.Buffer)
 		}
 	}
 
