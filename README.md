@@ -42,7 +42,8 @@ directory needs to be ignored by git.
 
 ```vim
 autocmd VimEnter * call goda_cmp#enable()
-inoremap <C-n> <Cmd>call goda_cmp#complete()<CR>   " complete now, whatever the length
+" complete now, whatever the length; <C-n> keeps selecting while the popup is open
+inoremap <expr> <C-n> pumvisible() ? "\<C-n>" : "\<Cmd>call goda_cmp#complete()\<CR>"
 ```
 
 (You do not need to set `'completeopt'`: with the native popup, goda-cmp makes sure
@@ -178,6 +179,27 @@ b.PatchGlobal(cmp.Config{
 
 To use one source twice with different parameters, add it under another name:
 `b.AddSource(cmp.NamedSource("around-md", around.New(around.Params{MinLength: 4})))`.
+
+### Selecting candidates
+
+Nothing is inserted until you pick a candidate.
+
+With `UI: "native"` the popup is Vim's own, so the usual keys work:
+
+| key | action |
+| --- | --- |
+| `<C-n>` / `<C-p>` | select the next / previous candidate (and insert it) |
+| `<C-y>` | accept the selected candidate and close the popup |
+| `<C-e>` | cancel, restoring what you typed |
+
+With `UI: "pum"` map the keys to pum.vim's functions:
+
+```vim
+inoremap <C-n> <Cmd>call pum#map#insert_relative(+1)<CR>
+inoremap <C-p> <Cmd>call pum#map#insert_relative(-1)<CR>
+inoremap <C-y> <Cmd>call pum#map#confirm()<CR>
+inoremap <C-e> <Cmd>call pum#map#cancel()<CR>
+```
 
 ### Popup
 
