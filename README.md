@@ -59,7 +59,9 @@ If nothing appears, `:echo goda#log()` shows what the plugin said, and
 `:echo goda#plugins()` should list `cmp`.
 
 The binary has to be built again after you edit `main.go` or `config.go`, or
-update goda.vim, goda-cmp.vim or an extension (`go get -u`, then build). Run
+update goda.vim, goda-cmp.vim or an extension. To update them, run
+`go get -u github.com/Shougo/goda-cmp.vim github.com/Shougo/goda.vim && go mod tidy`
+in the configuration directory, then build. Run
 `goda_cmp#build()` again: if completion is running it is stopped, rebuilt and
 started again with the new binary; if the build fails, you get the error and
 the previous binary is started again. To do it whenever you save the configuration:
@@ -68,8 +70,10 @@ the previous binary is started again. To do it whenever you save the configurati
 autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#build()
 ```
 
-If a build leaves you with a "protocol" error, the binary and the Vim script
-come from different versions of goda.vim: run `goda_cmp#build()` again.
+If starting fails with a handshake or "protocol" error, the binary was built
+with a different version of the goda.vim module than the goda.vim plugin you
+use. Update the module as above (`go get -u github.com/Shougo/goda.vim`) and
+run `goda_cmp#build()` again.
 
 To use pum.vim: `call goda_cmp#patch_global({'ui': 'pum'})` (or `UI: "pum"` in
 `config.go`) and configure pum.vim as usual (`pum#set_option`, `pum#map#...`).
