@@ -79,7 +79,7 @@ func TestRealVim(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	run := func(t *testing.T, pumDir string) []dump {
+	run := func(t *testing.T, pumDir, completeopt string) []dump {
 		out := filepath.Join(dir, "out-"+strings.ReplaceAll(t.Name(), "/", "-")+".jsonl")
 		steps := `[
 		  ["Go", 0.3],
@@ -97,7 +97,7 @@ func TestRealVim(t *testing.T) {
 		cmd := exec.Command("python3", "-I", "testdata/drive.py", vimBin, "testdata/vimrc.vim", text, steps)
 		cmd.Env = append(os.Environ(),
 			"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
-			"PUM_RTP="+pumDir)
+			"PUM_RTP="+pumDir, "GODA_COMPLETEOPT="+completeopt)
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("driver: %v\n%s", err, b)
 		}
@@ -147,12 +147,16 @@ func TestRealVim(t *testing.T) {
 		}
 	}
 
-	t.Run("native", func(t *testing.T) { check(t, run(t, "")) })
+	t.Run("native", func(t *testing.T) { check(t, run(t, "", "")) })
+	// The popup must never change the text, whatever the user's 'completeopt'
+	// is: without noinsert the first candidate would be inserted, and with
+	// longest the common prefix.
+	t.Run("native-with-default-completeopt", func(t *testing.T) { check(t, run(t, "", "menu,preview,longest")) })
 	// The stand-in checks that the pum UI calls pum#open(startcol, items)
 	// with the right items; it cannot check how pum.vim draws them.
 	fake, _ := filepath.Abs("testdata/fakepum")
-	t.Run("pum-with-stand-in", func(t *testing.T) { check(t, run(t, fake)) })
+	t.Run("pum-with-stand-in", func(t *testing.T) { check(t, run(t, fake, "")) })
 	if pum := os.Getenv("GODA_CMP_PUM"); pum != "" {
-		t.Run("pum", func(t *testing.T) { check(t, run(t, pum)) })
+		t.Run("pum", func(t *testing.T) { check(t, run(t, pum, "")) })
 	}
 }

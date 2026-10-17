@@ -96,7 +96,7 @@ function! goda_cmp#enable() abort
     autocmd!
     autocmd TextChangedI * call s:on_change('TextChangedI')
     autocmd TextChangedP * call s:on_change('TextChangedP')
-    autocmd InsertLeave * call goda_cmp#hide()
+    autocmd InsertLeave * call goda_cmp#hide() | call s:restore_completeopt()
   augroup END
 endfunction
 
@@ -295,10 +295,34 @@ function! s:fresh(r) abort
   return a:r.seq == s:seq && a:r.tick == b:changedtick && mode() =~# '^i'
 endfunction
 
+" complete() obeys 'completeopt': without noinsert/noselect it inserts the first
+" candidate into the text, and with longest the common prefix. Neither is wanted
+" for completion while typing, so the options are adjusted for as long as the
+" insert mode lasts and put back when it ends. Other options (popup, preview,
+" ...) are kept.
+let s:saved_completeopt = v:null
+
+function! s:set_completeopt() abort
+  if s:saved_completeopt is v:null
+    let s:saved_completeopt = &completeopt
+  endif
+  let l:keep = filter(split(s:saved_completeopt, ','),
+        \ {_, v -> index(['longest', 'noinsert', 'noselect', 'menuone'], v) < 0})
+  let &completeopt = join(l:keep + ['menuone', 'noinsert', 'noselect'], ',')
+endfunction
+
+function! s:restore_completeopt() abort
+  if s:saved_completeopt isnot v:null
+    let &completeopt = s:saved_completeopt
+    let s:saved_completeopt = v:null
+  endif
+endfunction
+
 function! goda_cmp#_native_show(r) abort
   if !s:fresh(a:r)
     return 0
   endif
+  call s:set_completeopt()
   call complete(a:r.col, a:r.items)
   return 1
 endfunction

@@ -41,10 +41,13 @@ directory needs to be ignored by git.
 **3. Add this to your vimrc / init.vim:**
 
 ```vim
-set completeopt=menuone,noinsert,noselect
 autocmd VimEnter * call goda_cmp#enable()
 inoremap <C-n> <Cmd>call goda_cmp#complete()<CR>   " complete now, whatever the length
 ```
+
+(You do not need to set `'completeopt'`: with the native popup, goda-cmp makes sure
+that nothing is inserted into the text until you select a candidate, and puts
+your value back when you leave insert mode.)
 
 **4. Build it and start:**
 
