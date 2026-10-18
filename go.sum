@@ -1,2 +1,4 @@
 github.com/Shougo/goda.vim v0.0.0-20261016100403-e51b38751c3b h1:Hc0CB3KntBM6HfblXMxnpAvkW9REli3Kq0UQd2FJY1Y=
 github.com/Shougo/goda.vim v0.0.0-20261016100403-e51b38751c3b/go.mod h1:M2CvXqMi0Ar/jdTDoV+9TBDJ/jpLShRxQV2MfrouDVU=
+github.com/Shougo/goda.vim v0.1.0 h1:yLFRJTkCuLfoLVFZLczTqz7/Dw/9YMav2Q7HixC7Lvs=
+github.com/Shougo/goda.vim v0.1.0/go.mod h1:M2CvXqMi0Ar/jdTDoV+9TBDJ/jpLShRxQV2MfrouDVU=
