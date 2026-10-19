@@ -262,7 +262,7 @@ func (cl *client) logMessage(params json.RawMessage) {
 // sync makes the server's copy of the document current. Vim gives no
 // changes, only the whole text, so it is full synchronization; a buffer whose
 // changedtick did not move is not sent again.
-func (cl *client) sync(uri, languageID string, bufnr, tick int, text func() string) error {
+func (cl *client) sync(uri, languageID string, bufnr, tick int, text func() (string, error)) error {
 	kind := cl.caps.syncKind()
 	if kind == 0 {
 		return nil
@@ -273,13 +273,16 @@ func (cl *client) sync(uri, languageID string, bufnr, tick int, text func() stri
 	if d != nil && d.bufnr == bufnr && d.tick == tick {
 		return nil
 	}
+	t, err := text()
+	if err != nil {
+		return err
+	}
 	if d == nil {
-		d = &docState{}
+		d = &docState{bufnr: bufnr, tick: tick, version: 1}
 		cl.docs[uri] = d
-		d.bufnr, d.tick, d.version = bufnr, tick, 1
 		return cl.conn.notify("textDocument/didOpen", map[string]any{
 			"textDocument": map[string]any{
-				"uri": uri, "languageId": languageID, "version": d.version, "text": text(),
+				"uri": uri, "languageId": languageID, "version": d.version, "text": t,
 			},
 		})
 	}
@@ -287,7 +290,20 @@ func (cl *client) sync(uri, languageID string, bufnr, tick int, text func() stri
 	d.version++
 	return cl.conn.notify("textDocument/didChange", map[string]any{
 		"textDocument":   map[string]any{"uri": uri, "version": d.version},
-		"contentChanges": []any{map[string]any{"text": text()}},
+		"contentChanges": []any{map[string]any{"text": t}},
+	})
+}
+
+// closeDoc tells the server that a document it was given is gone.
+func (cl *client) closeDoc(uri string) error {
+	cl.syncMu.Lock()
+	defer cl.syncMu.Unlock()
+	if cl.docs[uri] == nil {
+		return nil
+	}
+	delete(cl.docs, uri)
+	return cl.conn.notify("textDocument/didClose", map[string]any{
+		"textDocument": map[string]any{"uri": uri},
 	})
 }
 

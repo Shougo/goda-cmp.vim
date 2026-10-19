@@ -51,6 +51,8 @@ func fakeServer(r io.Reader, w io.Writer) {
 		text    string
 		version float64
 		setting any
+		opens   int // didOpen notifications
+		closes  int // didClose notifications
 		// A completion that came before the configuration answer waits
 		// for it, so that the test does not depend on timing.
 		waiting func()
@@ -102,6 +104,11 @@ func fakeServer(r io.Reader, w io.Writer) {
 			td := p["textDocument"].(map[string]any)
 			mu.Lock()
 			text, version = td["text"].(string), td["version"].(float64)
+			opens++
+			mu.Unlock()
+		case "textDocument/didClose":
+			mu.Lock()
+			closes++
 			mu.Unlock()
 		case "textDocument/didChange":
 			td := p["textDocument"].(map[string]any)
@@ -117,6 +124,7 @@ func fakeServer(r io.Reader, w io.Writer) {
 				lines := strings.Split(text, "\n")
 				cfg := fmt.Sprint(setting)
 				ver := version
+				docs := fmt.Sprintf("d%d_%d", opens, closes)
 				mu.Unlock()
 				// The word before the cursor, in UTF-16 units.
 				cur := []rune(lines[line])
@@ -165,6 +173,7 @@ func fakeServer(r io.Reader, w io.Writer) {
 						map[string]any{"label": "gamma", "sortText": "6", "textEdit": map[string]any{
 							"newText": "gamma", "insert": rng, "replace": replace,
 						}},
+						map[string]any{"label": "docs", "textEditText": docs, "sortText": "7"},
 					},
 				})
 			}
@@ -282,7 +291,7 @@ func TestFakeServer(t *testing.T) {
 	if g.Start != len("😀 x.") {
 		t.Errorf("Start = %d, want %d", g.Start, len("😀 x."))
 	}
-	want := []string{"early", "alpha", "beta(x)", "cfg_mint", "v1", "k1", "gamma"}
+	want := []string{"early", "alpha", "beta(x)", "cfg_mint", "v1", "k1", "gamma", "d1_0"}
 	if !reflect.DeepEqual(words(g), want) {
 		t.Errorf("words = %q, want %q", words(g), want)
 	}
@@ -326,6 +335,50 @@ func TestFakeServer(t *testing.T) {
 	}
 	if l, col := ed.Cursor(); l != 2 || col != len("😀 x.beta(x)")+1 {
 		t.Errorf("cursor = %d, %d", l, col)
+	}
+}
+
+// Entering a buffer starts the server and opens the document before any
+// completion; deleting it closes the document. Buffers that are not files are
+// left alone.
+func TestEvents(t *testing.T) {
+	s, ed := newFake(t, Params{})
+	h := ed.Host()
+	path, _ := h.Call(context.Background(), "bufname", 1)
+	ev := cmp.Event{Name: "BufEnter", Bufnr: 1, Tick: 1, Filetype: "text", Path: path.(string)}
+	send := func(ev cmp.Event) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := s.OnEvent(ctx, h, ev); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	help := ev
+	help.Buftype, help.Path = "help", "/doc/help.txt"
+	send(help)
+	if n := len(s.clients); n != 0 {
+		t.Fatalf("a help buffer started %d servers", n)
+	}
+
+	ed.SetLines(1, "x.al")
+	send(ev)
+	// Same changedtick: completion does not open it again.
+	g, _ := gather(t, s, h, &cmp.Context{Bufnr: 1, Tick: 1, Lnum: 1, Input: "x.al"})
+	if !slices.Contains(words(g), "d1_0") {
+		t.Errorf("after BufEnter: %q, want d1_0", words(g))
+	}
+	ev.Name = "BufDelete"
+	send(ev)
+	ev.Name = "BufWipeout" // a second close is not sent
+	send(ev)
+	g, _ = gather(t, s, h, &cmp.Context{Bufnr: 1, Tick: 1, Lnum: 1, Input: "x.al"})
+	if !slices.Contains(words(g), "d2_1") {
+		t.Errorf("after BufDelete: %q, want d2_1 (closed once, opened again)", words(g))
+	}
+	if specs := s.Events(); len(specs) != 1 || len(specs[0].Filetypes) != 0 {
+		t.Errorf("Events() = %+v", specs)
 	}
 }
 

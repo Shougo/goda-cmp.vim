@@ -26,6 +26,7 @@ type engine struct {
 	keywords map[string]*keywordEntry
 
 	inits     map[string]*initState
+	ev        *events
 	nextShow  int64
 	shows     map[int64]*shown
 	showOrder []int64
@@ -54,12 +55,14 @@ type keywordEntry struct {
 }
 
 func newEngine(b *Builder) *engine {
-	return &engine{
+	e := &engine{
 		b:        b,
 		keywords: map[string]*keywordEntry{},
 		inits:    map[string]*initState{},
 		shows:    map[int64]*shown{},
 	}
+	e.ev = newEvents(e)
+	return e
 }
 
 func (e *engine) Name() string { return PluginName }
@@ -85,6 +88,12 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 		// select(ref): the user moved to this item; resolves it and tells
 		// the Vim side through goda_cmp#_resolved. Meant as a notification.
 		"select": e.selectItem,
+		// events() -> [{event, filetypes}]: the autocmd events the sources
+		// want (see EventHandler), for the Vim side to listen to.
+		"events": e.eventsHandler,
+		// event(ev): one autocmd event of a buffer, numbered by the Vim
+		// side. Meant as a notification.
+		"event": e.event,
 		// validate(config): checks a patch the Vim side is about to store.
 		"validate": e.validate,
 		// sources() -> sorted names, for diagnostics.
@@ -349,6 +358,7 @@ func (e *engine) ensureInit(ctx context.Context, h sdk.Host, name string, src So
 // their registration. goda.vim's host calls it (sdk.Closer) when the plugin
 // stops.
 func (e *engine) Close(ctx context.Context) error {
+	e.ev.close()
 	var errs []string
 	for i := len(e.b.sourceOrder) - 1; i >= 0; i-- {
 		name := e.b.sourceOrder[i]

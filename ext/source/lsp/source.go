@@ -19,8 +19,9 @@
 // (sorter_text).
 //
 // Documents are synchronized in full: the whole buffer is sent when its
-// changedtick moved. goda-cmp tells sources nothing about buffers being
-// closed, so documents are never closed until the server stops.
+// changedtick moved. Entering a buffer of the source's filetypes starts its
+// server and opens the document; deleting the buffer closes it
+// (cmp.EventHandler).
 package lsp
 
 import (
@@ -81,8 +82,8 @@ type Params struct {
 }
 
 // Source is the language server source. It implements cmp.Source,
-// cmp.StreamSource, cmp.Initializer, cmp.Resolver, cmp.CompleteDoner and
-// cmp.Closer.
+// cmp.StreamSource, cmp.Initializer, cmp.Resolver, cmp.CompleteDoner,
+// cmp.Closer and cmp.EventHandler.
 type Source struct {
 	p Params
 
@@ -222,12 +223,7 @@ func (s *Source) GatherStream(ctx context.Context, h sdk.Host, c *cmp.Context, e
 	if s.p.LanguageID != nil {
 		langID = s.p.LanguageID(c.Filetype)
 	}
-	text := func() string {
-		if len(buf.lines) == 0 {
-			return ""
-		}
-		return strings.Join(buf.lines, "\n") + "\n"
-	}
+	text := func() (string, error) { return joinLines(buf.lines), nil }
 	if err := cl.sync(uri, langID, c.Bufnr, int(c.Tick), text); err != nil {
 		return err
 	}
@@ -390,6 +386,80 @@ func (s *Source) gathered(cl *client, c *cmp.Context, ks int, after string, raws
 	return cmp.Gathered{Start: minStart, Items: items}
 }
 
+// joinLines is the text of a buffer: every line ends with a newline.
+func joinLines(lines []string) string {
+	if len(lines) == 0 {
+		return ""
+	}
+	return strings.Join(lines, "\n") + "\n"
+}
+
+// Events asks for the buffers of the source's filetypes (all, when
+// Params.Filetypes is empty): entering one starts its server and opens the
+// document, deleting or wiping it out closes the document.
+func (s *Source) Events() []cmp.EventSpec {
+	return []cmp.EventSpec{{
+		Events:    []string{"BufEnter", "BufDelete", "BufWipeout"},
+		Filetypes: s.p.Filetypes,
+	}}
+}
+
+// OnEvent starts the server for a file as soon as it is entered, so that the
+// first completion does not wait for it, and keeps the server's set of open
+// documents in step with the buffers.
+func (s *Source) OnEvent(ctx context.Context, h sdk.Host, ev cmp.Event) error {
+	if ev.Buftype != "" || ev.Path == "" || strings.HasSuffix(ev.Path, "/") || strings.HasSuffix(ev.Path, `\`) {
+		return nil
+	}
+	uri := fileURI(ev.Path)
+	switch ev.Name {
+	case "BufEnter":
+		cl := s.client(ev.Path)
+		if cl == nil {
+			return nil
+		}
+		// A slow server may still be starting when ctx ends; the first
+		// completion then opens the document instead.
+		if err := cl.wait(ctx); err != nil {
+			if ctx.Err() != nil {
+				return nil
+			}
+			return err
+		}
+		langID := ev.Filetype
+		if s.p.LanguageID != nil {
+			langID = s.p.LanguageID(ev.Filetype)
+		}
+		return cl.sync(uri, langID, ev.Bufnr, int(ev.Tick), func() (string, error) {
+			v, err := h.Call(ctx, "getbufline", ev.Bufnr, 1, "$")
+			if err != nil {
+				return "", err
+			}
+			raw, _ := v.([]any)
+			lines := make([]string, len(raw))
+			for i, l := range raw {
+				lines[i], _ = l.(string)
+			}
+			return joinLines(lines), nil
+		})
+	case "BufDelete", "BufWipeout":
+		cl := s.existing(ev.Path)
+		if cl == nil {
+			return nil
+		}
+		select {
+		case <-cl.ready:
+		default:
+			return nil // still starting: it was given nothing yet
+		}
+		if cl.initErr != nil {
+			return nil
+		}
+		return cl.closeDoc(uri)
+	}
+	return nil
+}
+
 func info(detail, doc string) string {
 	switch {
 	case detail == "":
@@ -496,6 +566,18 @@ func (s *Source) client(path string) *client {
 	return cl
 }
 
+// existing returns the server for the file at path if one runs; it does not
+// start one.
+func (s *Source) existing(path string) *client {
+	root := s.root(filepath.Dir(path))
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if cl := s.clients[root]; cl != nil && cl.alive() {
+		return cl
+	}
+	return nil
+}
+
 func (s *Source) root(dir string) string {
 	s.mu.Lock()
 	r, ok := s.roots[dir]
@@ -531,4 +613,5 @@ var (
 	_ cmp.Resolver      = (*Source)(nil)
 	_ cmp.CompleteDoner = (*Source)(nil)
 	_ cmp.Closer        = (*Source)(nil)
+	_ cmp.EventHandler  = (*Source)(nil)
 )

@@ -157,6 +157,7 @@ func (b *Builder) checkConfig(where string, cfg Config) []string {
 // Validate reports every problem of the configuration made in Go.
 func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
+	errs = append(errs, b.checkEvents()...)
 	errs = append(errs, b.checkConfig("global", b.global)...)
 	for ft, c := range b.ft {
 		errs = append(errs, b.checkConfig("filetype "+ft, c)...)

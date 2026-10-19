@@ -104,6 +104,7 @@ function! goda_cmp#enable() abort
     autocmd User PumCompleteDone call s:on_done(get(g:, 'pum#completed_item', {}))
     autocmd User PumCompleteChanged call s:on_select(exists('*pum#current_item') ? pum#current_item() : {})
   augroup END
+  call s:setup_events()
 endfunction
 
 function! goda_cmp#disable() abort
@@ -112,12 +113,69 @@ function! goda_cmp#disable() abort
   endif
   unlet s:enabled
   silent! autocmd! goda_cmp
+  silent! autocmd! goda_cmp_events
   call goda_cmp#hide()
   call goda#stop('cmp')
 endfunction
 
 " ---------------------------------------------------------------------------
-" Requests
+" Buffer events for the sources that want them (cmp.EventHandler). The plugin
+" says which autocmd events for which filetypes; buffers of other filetypes
+" cost one comparison here and nothing else.
+
+let s:event_seq = 0
+let s:event_fts = {}  " event -> filetypes ([] for all)
+
+function! s:setup_events() abort
+  silent! autocmd! goda_cmp_events
+  let s:event_fts = {}
+  " A new binary expects the numbering to start at 1.
+  let s:event_seq = 0
+  try
+    let l:table = goda#request('cmp', 'events')
+  catch
+    " an older binary without events
+    return
+  endtry
+  augroup goda_cmp_events
+    for l:e in l:table
+      if !exists('##' . l:e.event)
+        echohl WarningMsg
+        echomsg 'goda-cmp: unknown autocmd event: ' . l:e.event
+        echohl None
+        continue
+      endif
+      let s:event_fts[l:e.event] = l:e.filetypes
+      execute 'autocmd' l:e.event '* call s:on_event(' string(l:e.event) ', str2nr(expand("<abuf>")))'
+    endfor
+  augroup END
+  " The current buffer was entered before the plugin started.
+  if has_key(s:event_fts, 'BufEnter')
+    call s:on_event('BufEnter', bufnr('%'))
+  endif
+endfunction
+
+function! s:on_event(event, bufnr) abort
+  let l:ft = getbufvar(a:bufnr, '&filetype')
+  let l:fts = get(s:event_fts, a:event, [])
+  if !empty(l:fts) && empty(filter(split(l:ft, '\.'), {_, v -> index(l:fts, v) >= 0}))
+    return
+  endif
+  if !goda#is_running('cmp')
+    return
+  endif
+  let l:name = bufname(a:bufnr)
+  let s:event_seq += 1
+  call goda#notify('cmp', 'event', {
+        \ 'seq': s:event_seq,
+        \ 'name': a:event,
+        \ 'bufnr': a:bufnr,
+        \ 'tick': getbufvar(a:bufnr, 'changedtick'),
+        \ 'filetype': l:ft,
+        \ 'buftype': getbufvar(a:bufnr, '&buftype'),
+        \ 'path': l:name ==# '' ? '' : fnamemodify(l:name, ':p'),
+        \ })
+endfunction
 
 " ---------------------------------------------------------------------------
 " Settings (ddc.vim: ddc#custom#patch_*). A patch is a dictionary with the

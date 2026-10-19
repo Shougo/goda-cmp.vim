@@ -290,3 +290,48 @@ func TestRealVimStream(t *testing.T) {
 		t.Errorf("OnCompleteDone recorded %q, want %q", got, "alpha_fast id-1")
 	}
 }
+
+// TestRealVimEvents: buffer events reach a source that asked for them, only
+// for its filetype, in order, starting with a BufEnter for the buffer that
+// was current when goda-cmp was enabled.
+func TestRealVimEvents(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts Vim")
+	}
+	vimBin, err := exec.LookPath("vim")
+	if err != nil {
+		t.Skip("vim is not installed")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/eventcfg")
+	dir := t.TempDir()
+	a := filepath.Join(dir, "a.txt")
+	if err := os.WriteFile(a, []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	events := filepath.Join(dir, "events.txt")
+	// a.txt (current at start), c.md (not text), b.txt, then :bd of b.txt.
+	stepList := [][]any{
+		{":e " + filepath.Join(dir, "c.md") + "\r", 0.5},
+		{":e " + filepath.Join(dir, "b.txt") + "\r", 0.5},
+		{":bd\r", 1.0},
+	}
+	steps, _ := json.Marshal(stepList)
+	cmd := exec.Command("python3", "-I", "testdata/drive.py", vimBin, "testdata/vimrc.vim", a, string(steps))
+	cmd.Env = append(os.Environ(),
+		"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin,
+		"GODA_OUT="+filepath.Join(dir, "out.jsonl"), "GODA_EVENT_FILE="+events, "PUM_RTP=")
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("driver: %v\n%s", err, b)
+	}
+	b, err := os.ReadFile(events)
+	if err != nil {
+		t.Fatalf("no events recorded: %v", err)
+	}
+	want := "BufEnter text a.txt\nBufEnter text b.txt\nBufDelete text b.txt\n"
+	if string(b) != want {
+		t.Errorf("events:\n%s\nwant:\n%s", b, want)
+	}
+}

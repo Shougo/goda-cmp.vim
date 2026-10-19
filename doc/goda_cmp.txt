@@ -243,6 +243,7 @@ working:
 	CompleteDoner	OnCompleteDone: act when a candidate is accepted
 	Resolver	Resolve: fill in an item when it is selected
 	Closer		Close: release resources when the plugin stops
+	EventHandler	Events, OnEvent: act on buffer events
 
 `Item` also has FilterText and SortText (LSP filterText and sortText), Dup,
 and UserData, which stays in the plugin process and comes back in
@@ -256,6 +257,17 @@ keystrokes.
 has it.  `Resolve` shows its result through `pum#update_current_item()` with
 pum.vim, and in the native popup only when 'completeopt' has "popup" and the
 item already had an info.
+
+Buffer events~
+An EventHandler names the autocmd events it wants and for which filetypes
+(`Events() []EventSpec`); the list is asked once, when the plugin starts, and
+the Vim side listens to exactly those, filtering by filetype before anything
+is sent.  `OnEvent` gets an `Event` (name, buffer number, changedtick,
+filetype, 'buftype' and the full path of the file).  The events of a source
+arrive one at a time, in the order Vim saw them.  When goda-cmp is enabled,
+the current buffer gets a BufEnter, since its own came before the plugin
+started.  There is no setting for this: the source decides, typically from
+the filetypes it was configured with.
 
 Package `cmp/cmptest` is a fake editor for testing extensions without Vim.
 `cmptest.Host` answers calls with Go functions (`Funcs`) and evaluates simple
@@ -343,6 +355,10 @@ What it does:
   (see ConfirmBehavior), then applies its additionalTextEdits, such as the
   import of a package that was not imported yet, and keeps the cursor where
   it was.
+- Entering a buffer of one of `Filetypes` starts the server for its root and
+  opens the document, so the first completion does not wait for the server
+  to start; deleting or wiping out the buffer closes the document.  Without
+  `Filetypes`, that happens for files of every filetype.
 - When the plugin stops, the servers are shut down.
 
 When items start at different columns (gopls' postfix completions start at
@@ -350,9 +366,7 @@ the expression, not at the word), all are aligned to the leftmost column: the
 text in between becomes part of the other words, and the popup shows them
 without it.
 
-Not done: commands attached to items, edits that start on another line, and
-closing documents (didClose), since sources are not told about closed
-buffers.
+Not done: commands attached to items, and edits that start on another line.
 
 ==============================================================================
 FAQ                                                             *goda-cmp-faq*
