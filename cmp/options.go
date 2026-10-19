@@ -75,6 +75,10 @@ type Config struct {
 	// request is sent after typing (default 0). nil keeps the previous
 	// value.
 	AutoCompleteDelay *int `json:"autoCompleteDelay"`
+	// PartialInterval is the least time in milliseconds between two
+	// updates of the popup while a StreamSource is still answering
+	// (default 50). The first update is not delayed.
+	PartialInterval *int `json:"partialInterval"`
 	// AutoComplete turns completion while typing on or off (default on).
 	AutoComplete *bool `json:"autoComplete"`
 	// SourceTimeout bounds every source and filter, in milliseconds
@@ -100,6 +104,7 @@ func defaultConfig() Config {
 			},
 		},
 		AutoCompleteDelay: Ptr(0),
+		PartialInterval:   Ptr(50),
 		AutoComplete:      Ptr(true),
 		SourceTimeout:     Ptr(2000),
 	}
@@ -116,6 +121,9 @@ func merge(base, p Config) Config {
 	}
 	if p.PostFilters != nil {
 		out.PostFilters = append([]string{}, p.PostFilters...)
+	}
+	if p.PartialInterval != nil {
+		out.PartialInterval = p.PartialInterval
 	}
 	if p.AutoCompleteDelay != nil {
 		out.AutoCompleteDelay = p.AutoCompleteDelay

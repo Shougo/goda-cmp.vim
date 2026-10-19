@@ -28,6 +28,8 @@ func (u vimUI) Show(ctx context.Context, h sdk.Host, r ShowRequest) error {
 		"tick":  r.Context.Tick,
 		"col":   r.Col,
 		"items": r.Items,
+		// false while sources are still answering (see StreamSource)
+		"final": r.Final,
 	})
 	return err
 }

@@ -85,9 +85,41 @@ type Item struct {
 	Menu string `json:"menu,omitempty"`
 	Kind string `json:"kind,omitempty"`
 	Info string `json:"info,omitempty"`
+	// Dup (1) keeps this item when another one has the same Word, which
+	// Vim would otherwise drop.
+	Dup int `json:"dup,omitempty"`
+
+	// FilterText is what matchers compare with when it is not empty
+	// (LSP filterText); otherwise Word. SortText orders the items of a
+	// source for sorters that care (LSP sortText); see Item.Sort.
+	FilterText string `json:"-"`
+	SortText   string `json:"-"`
+	// UserData belongs to the source that produced the item. It stays in
+	// the plugin process and is handed back to OnCompleteDone and Resolve.
+	UserData any `json:"-"`
 
 	// Source is the name of the source that produced the item.
 	Source string `json:"-"`
+
+	// ref identifies the item in the list a UI showed; the engine sets it
+	// (as Vim's user_data) just before the UI sees the items.
+	Ref string `json:"user_data,omitempty"`
+}
+
+// Filter returns the text matchers should compare with.
+func (i Item) Filter() string {
+	if i.FilterText != "" {
+		return i.FilterText
+	}
+	return i.Word
+}
+
+// Sort returns the text sorters should compare with.
+func (i Item) Sort() string {
+	if i.SortText != "" {
+		return i.SortText
+	}
+	return i.Word
 }
 
 // Display is what the user sees in the list: Abbr when set, otherwise Word.
@@ -116,6 +148,77 @@ type Source interface {
 	Gather(ctx context.Context, h sdk.Host, c *Context) (Gathered, error)
 }
 
+// StreamSource is a Source that can hand over candidates as they arrive
+// instead of all at once, which is what a language server needs: one server
+// answers fast, another slowly, and the first should not wait for the second.
+//
+// Every emit replaces what this source emitted before in the same request, so
+// a re-ranked or shortened list is expressed by emitting it again. GatherStream
+// returns when the source has nothing more to add. emit fails once the request
+// is superseded; the source should stop then. Items emitted before a timeout
+// are kept.
+//
+// A StreamSource must also be a Source. Collect makes that a one-liner.
+type StreamSource interface {
+	Source
+	GatherStream(ctx context.Context, h sdk.Host, c *Context, emit func(Gathered) error) error
+}
+
+// Collect implements Source.Gather on top of GatherStream: it returns the
+// last emitted value.
+func Collect(ctx context.Context, h sdk.Host, c *Context, s interface {
+	GatherStream(context.Context, sdk.Host, *Context, func(Gathered) error) error
+}) (Gathered, error) {
+	var last Gathered
+	err := s.GatherStream(ctx, h, c, func(g Gathered) error {
+		last = g
+		return ctx.Err()
+	})
+	return last, err
+}
+
+// Initializer is implemented by sources that need to start something (a
+// connection, an index) before they can answer. Init runs once, in the
+// background of the first request that uses the source, and is bounded by
+// sourceTimeout. A source whose Init failed is disabled for the rest of the
+// process.
+type Initializer interface {
+	Init(ctx context.Context, h sdk.Host) error
+}
+
+// Closer is implemented by sources that hold something to release (a language
+// server process, a connection). Close is called once when the plugin stops:
+// the editor went away, or goda#stop() was called. It may run while requests
+// are still in flight, and also for a source whose Init never ran. The editor
+// is gone, so there is no sdk.Host. It needs goda.vim with sdk.Closer; with an
+// older one it is never called.
+type Closer interface {
+	Close(ctx context.Context) error
+}
+
+// DoneArgs is what OnCompleteDone and Resolve receive.
+type DoneArgs struct {
+	// Context is the context of the request that produced Item.
+	Context *Context
+	// Item is the candidate as the source returned it, with UserData; the
+	// converters have not touched UserData.
+	Item Item
+}
+
+// CompleteDoner is implemented by sources that act when one of their
+// candidates is accepted (an LSP source applies additionalTextEdits there).
+// It is called after the text has been inserted. Errors are logged.
+type CompleteDoner interface {
+	OnCompleteDone(ctx context.Context, h sdk.Host, a DoneArgs) error
+}
+
+// Resolver is implemented by sources whose candidates can be completed
+// lazily (LSP completionItem/resolve), typically to fill Info when the item
+// is selected. Resolve returns the updated item.
+type Resolver interface {
+	Resolve(ctx context.Context, h sdk.Host, a DoneArgs) (Item, error)
+}
+
 // FilterInput is what a Filter works on.
 type FilterInput struct {
 	Context *Context
@@ -141,6 +244,11 @@ type ShowRequest struct {
 	// first argument of Vim's complete().
 	Col   int
 	Items []Item
+	// Final is false while sources are still working (see StreamSource).
+	// Pending lists them. A UI may skip non-final updates, for instance
+	// while the user is choosing an item.
+	Final   bool
+	Pending []string
 }
 
 // UI shows candidates in the editor.

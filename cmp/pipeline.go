@@ -11,68 +11,175 @@ import (
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-type gatherResult struct {
+// slot is what one source contributed so far.
+type slot struct {
 	name  string
 	start int
 	items []Item
-	err   error
+	done  bool // the source returned (or failed); later emits are ignored
 }
 
-// run gathers, filters and merges. It returns the items and the byte offset in
-// c.Input where they start.
-func (e *engine) run(ctx context.Context, h sdk.Host, c *Context, cfg Config) ([]Item, int, error) {
-	timeout := cfg.timeout()
+// showFunc receives the merged result. final is false while stream sources
+// are still working; pending names them.
+type showFunc func(items []Item, start int, final bool, pending []string) error
 
-	results := make([]gatherResult, len(cfg.Sources))
-	var wg sync.WaitGroup
+type runner struct {
+	e       *engine
+	h       sdk.Host
+	c       *Context
+	cfg     Config
+	timeout time.Duration
+
+	mu    sync.Mutex
+	slots []slot
+	kick  chan struct{}
+}
+
+// run gathers, filters and merges, calling show as results arrive. Without a
+// StreamSource among the enabled sources show is called once, when every
+// source has answered, exactly like a plain gather. With one, it is called
+// whenever something new is there, at most every PartialInterval.
+func (e *engine) run(ctx context.Context, h sdk.Host, c *Context, cfg Config, show showFunc) error {
+	r := &runner{
+		e: e, h: h, c: c, cfg: cfg, timeout: cfg.timeout(),
+		slots: make([]slot, len(cfg.Sources)),
+		kick:  make(chan struct{}, 1),
+	}
+	partial := false
 	for i, name := range cfg.Sources {
+		r.slots[i].name = name
+		if _, ok := e.b.sources[name].(StreamSource); ok {
+			partial = true
+		}
+	}
+
+	var wg sync.WaitGroup
+	for i := range cfg.Sources {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = e.gatherOne(ctx, h, c, cfg, name, timeout)
+			r.gatherOne(ctx, i)
 		}()
 	}
-	wg.Wait()
+	allDone := make(chan struct{})
+	go func() { wg.Wait(); close(allDone) }()
 
-	// Sources may start at different columns. Everything is moved to the
-	// leftmost one by prepending the text in between to the words.
+	interval := time.Duration(deref(cfg.PartialInterval, 50)) * time.Millisecond
+	for {
+		if partial {
+			select {
+			case <-r.kick:
+			case <-allDone:
+			case <-ctx.Done():
+				return nil
+			}
+		} else {
+			select {
+			case <-allDone:
+			case <-ctx.Done():
+				return nil
+			}
+		}
+		final := false
+		select {
+		case <-allDone:
+			final = true
+		default:
+		}
+		if ctx.Err() != nil {
+			return nil // superseded
+		}
+		items, start, pending := r.merge()
+		if len(items) > 0 || final {
+			if err := show(items, start, final, pending); err != nil {
+				return err
+			}
+		}
+		if final {
+			return nil
+		}
+		select {
+		case <-time.After(interval):
+		case <-allDone:
+		case <-ctx.Done():
+			return nil
+		}
+	}
+}
+
+// merge combines the slots. Sources may start at different columns;
+// everything is moved to the leftmost one by prepending the text in between
+// to the words.
+func (r *runner) merge() ([]Item, int, []string) {
+	r.mu.Lock()
+	slots := make([]slot, len(r.slots))
+	copy(slots, r.slots)
+	r.mu.Unlock()
+
+	var pending []string
 	minStart := -1
-	for _, r := range results {
-		if r.err == nil && len(r.items) > 0 && (minStart < 0 || r.start < minStart) {
-			minStart = r.start
+	for _, s := range slots {
+		if !s.done {
+			pending = append(pending, s.name)
+		}
+		if len(s.items) > 0 && (minStart < 0 || s.start < minStart) {
+			minStart = s.start
 		}
 	}
 	if minStart < 0 {
-		return nil, 0, nil
+		return nil, 0, pending
 	}
 	var merged []Item
-	for _, r := range results {
-		if r.err != nil || len(r.items) == 0 {
-			continue
-		}
-		prefix := c.Input[minStart:r.start]
-		for _, it := range r.items {
+	for _, s := range slots {
+		prefix := r.c.Input[minStart:s.start]
+		for _, it := range s.items {
 			if prefix != "" {
 				it.Word = prefix + it.Word
 			}
 			merged = append(merged, it)
 		}
 	}
-
-	if len(cfg.PostFilters) > 0 {
+	if len(r.cfg.PostFilters) > 0 {
 		var err error
-		merged, err = e.chain(ctx, c, c.Input[minStart:], merged, cfg.PostFilters, timeout)
+		merged, err = r.e.chain(context.Background(), r.c, r.c.Input[minStart:], merged, r.cfg.PostFilters, r.timeout)
 		if err != nil {
 			log.Printf("cmp: postFilters: %v", err)
 		}
 	}
-	return merged, minStart, nil
+	return merged, minStart, pending
 }
 
-func (e *engine) gatherOne(ctx context.Context, h sdk.Host, c *Context, cfg Config, name string, timeout time.Duration) gatherResult {
-	res := gatherResult{name: name}
+func (r *runner) store(i int, start int, items []Item, done bool) {
+	r.mu.Lock()
+	s := &r.slots[i]
+	if s.done {
+		r.mu.Unlock()
+		return
+	}
+	s.start, s.items, s.done = start, items, done
+	r.mu.Unlock()
+	select {
+	case r.kick <- struct{}{}:
+	default:
+	}
+}
+
+func (r *runner) finish(i int) { // mark done, keeping what was emitted
+	r.mu.Lock()
+	r.slots[i].done = true
+	r.mu.Unlock()
+	select {
+	case r.kick <- struct{}{}:
+	default:
+	}
+}
+
+func (r *runner) gatherOne(ctx context.Context, i int) {
+	e, c, cfg := r.e, r.c, r.cfg
+	name := r.slots[i].name
 	src := e.b.sources[name]
 	opt := cfg.sourceOption(name)
+	defer r.finish(i)
 
 	// Each source sees the context with its own keyword pattern.
 	sc := *c
@@ -80,58 +187,84 @@ func (e *engine) gatherOne(ctx context.Context, h sdk.Host, c *Context, cfg Conf
 		re, err := e.keyword(opt.KeywordPattern)
 		if err != nil {
 			log.Printf("cmp: source %s: %v", name, err)
-			res.err = err
-			return res
+			return
 		}
 		sc.keyword = re
 	}
 
-	sctx, cancel := context.WithTimeout(ctx, timeout)
+	sctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
-	g, err := sdk.Guard(sctx, func() (Gathered, error) { return src.Gather(sctx, h, &sc) })
+	if err := e.ensureInit(sctx, r.h, name, src, r.timeout); err != nil {
+		if ctx.Err() == nil {
+			log.Printf("cmp: source %s: init: %v", name, err)
+		}
+		return
+	}
+
+	// process turns what the source returned into this source's slot.
+	process := func(g Gathered) ([]Item, bool) {
+		if g.Start < 0 || g.Start > len(c.Input) {
+			log.Printf("cmp: source %s: start %d is outside the input", name, g.Start)
+			return nil, false
+		}
+		complete := c.Input[g.Start:]
+		if !c.Manual && utf8.RuneCountInString(complete) < deref(opt.MinAutoCompleteLength, 1) {
+			return nil, true
+		}
+		items := make([]Item, len(g.Items))
+		copy(items, g.Items)
+		for k := range items {
+			items[k].Source = name
+			if items[k].Menu == "" {
+				items[k].Menu = opt.Mark
+			}
+		}
+		// The cap applies after sorting, so the best candidates survive.
+		items, err := e.chain(sctx, c, complete, items, opt.Matchers, r.timeout)
+		if err == nil {
+			items, err = e.chain(sctx, c, complete, items, opt.Sorters, r.timeout)
+		}
+		if err == nil {
+			if m := deref(opt.MaxItems, 0); m > 0 && len(items) > m {
+				items = items[:m]
+			}
+			items, err = e.chain(sctx, c, complete, items, opt.Converters, r.timeout)
+		}
+		if err != nil {
+			log.Printf("cmp: source %s: %v", name, err)
+			return nil, false
+		}
+		return items, true
+	}
+
+	if ss, ok := src.(StreamSource); ok {
+		_, err := sdk.Guard(sctx, func() (struct{}, error) {
+			return struct{}{}, ss.GatherStream(sctx, r.h, &sc, func(g Gathered) error {
+				if err := sctx.Err(); err != nil {
+					return err
+				}
+				if items, ok := process(g); ok {
+					r.store(i, g.Start, items, false)
+				}
+				return nil
+			})
+		})
+		if err != nil && ctx.Err() == nil {
+			log.Printf("cmp: source %s: %v", name, err)
+		}
+		return // what was emitted stays
+	}
+
+	g, err := sdk.Guard(sctx, func() (Gathered, error) { return src.Gather(sctx, r.h, &sc) })
 	if err != nil {
 		if ctx.Err() == nil { // a superseded request is not worth a log line
 			log.Printf("cmp: source %s: %v", name, err)
 		}
-		res.err = err
-		return res
+		return
 	}
-	if g.Start < 0 || g.Start > len(c.Input) {
-		res.err = fmt.Errorf("start %d is outside the input", g.Start)
-		log.Printf("cmp: source %s: %v", name, res.err)
-		return res
+	if items, ok := process(g); ok {
+		r.store(i, g.Start, items, true)
 	}
-	complete := c.Input[g.Start:]
-	if !c.Manual && utf8.RuneCountInString(complete) < deref(opt.MinAutoCompleteLength, 1) {
-		return res
-	}
-
-	items := make([]Item, len(g.Items))
-	copy(items, g.Items)
-	for i := range items {
-		items[i].Source = name
-		if items[i].Menu == "" {
-			items[i].Menu = opt.Mark
-		}
-	}
-	// The cap applies after sorting, so the best candidates survive.
-	items, err = e.chain(ctx, c, complete, items, opt.Matchers, timeout)
-	if err == nil {
-		items, err = e.chain(ctx, c, complete, items, opt.Sorters, timeout)
-	}
-	if err == nil {
-		if m := deref(opt.MaxItems, 0); m > 0 && len(items) > m {
-			items = items[:m]
-		}
-		items, err = e.chain(ctx, c, complete, items, opt.Converters, timeout)
-	}
-	if err != nil {
-		log.Printf("cmp: source %s: %v", name, err)
-		res.err = err
-		return res
-	}
-	res.start, res.items = g.Start, items
-	return res
 }
 
 // chain applies filters in order. A failing filter aborts the chain with its

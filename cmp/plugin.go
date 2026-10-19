@@ -6,7 +6,10 @@ import (
 	"log"
 	"regexp"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/Shougo/goda.vim/sdk"
 )
@@ -21,14 +24,43 @@ type engine struct {
 	latest   int64
 	cancel   context.CancelFunc
 	keywords map[string]*keywordEntry
+
+	inits     map[string]*initState
+	nextShow  int64
+	shows     map[int64]*shown
+	showOrder []int64
 }
+
+// initState tracks the Init of one source.
+type initState struct {
+	done chan struct{}
+	err  error
+}
+
+// shown is a list a UI displayed, kept so that an item the user picks can be
+// found again (Item.Ref is "<show id>:<index>").
+type shown struct {
+	c       *Context
+	items   []Item
+	timeout time.Duration
+}
+
+// How many shown lists are kept. Streaming makes several per request.
+const keepShown = 16
 
 type keywordEntry struct {
 	re  *regexp.Regexp
 	err error
 }
 
-func newEngine(b *Builder) *engine { return &engine{b: b, keywords: map[string]*keywordEntry{}} }
+func newEngine(b *Builder) *engine {
+	return &engine{
+		b:        b,
+		keywords: map[string]*keywordEntry{},
+		inits:    map[string]*initState{},
+		shows:    map[int64]*shown{},
+	}
+}
 
 func (e *engine) Name() string { return PluginName }
 
@@ -43,6 +75,16 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 		// options(filetype, patches) -> {ui, autoComplete, delay, sources}:
 		// what the Vim side needs to know before it asks.
 		"options": e.options,
+		// done(ref): the user accepted the item the UI showed with this
+		// user_data; calls the source's OnCompleteDone. Meant as a
+		// notification.
+		"done": e.done,
+		// resolve(ref) -> item: asks the source to complete the item
+		// (Info, ...). Returns the item in complete-items form.
+		"resolve": e.resolve,
+		// select(ref): the user moved to this item; resolves it and tells
+		// the Vim side through goda_cmp#_resolved. Meant as a notification.
+		"select": e.selectItem,
 		// validate(config): checks a patch the Vim side is about to store.
 		"validate": e.validate,
 		// sources() -> sorted names, for diagnostics.
@@ -121,33 +163,207 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		return nil, err
 	}
 
-	items, start, err := e.run(ctx, h, &c, cfg)
+	shownItems := 0
+	err = e.run(ctx, h, &c, cfg, func(items []Item, start int, final bool, pending []string) error {
+		u := ui
+		if len(items) > 0 && cfg.DynamicUI != nil {
+			name, err := sdk.Guard(ctx, func() (string, error) {
+				return cfg.DynamicUI(ctx, h, DynamicUIArgs{Context: &c, Items: items})
+			})
+			if err != nil {
+				log.Printf("cmp: dynamicUi: %v", err)
+			} else if name != "" {
+				if u, err = e.ui(name); err != nil {
+					return err
+				}
+			}
+		}
+		if len(items) == 0 {
+			shownItems = 0
+			return u.Hide(ctx, h)
+		}
+		shownItems = len(items)
+		items = e.remember(&c, cfg.timeout(), items)
+		if err := u.Show(ctx, h, ShowRequest{Context: &c, Col: start + 1, Items: items, Final: final, Pending: pending}); err != nil {
+			log.Printf("cmp: ui %s: %v", u.Name(), err)
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 	if ctx.Err() != nil {
 		return nil, nil // superseded
 	}
-	if len(items) > 0 && cfg.DynamicUI != nil {
-		name, err := sdk.Guard(ctx, func() (string, error) {
-			return cfg.DynamicUI(ctx, h, DynamicUIArgs{Context: &c, Items: items})
-		})
-		if err != nil {
-			log.Printf("cmp: dynamicUi: %v", err)
-		} else if name != "" {
-			if ui, err = e.ui(name); err != nil {
-				return nil, err
-			}
-		}
+	return shownItems, nil
+}
+
+// remember keeps the list for done/resolve and returns a copy whose items
+// carry their reference.
+func (e *engine) remember(c *Context, timeout time.Duration, items []Item) []Item {
+	out := make([]Item, len(items))
+	copy(out, items)
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.nextShow++
+	id := e.nextShow
+	for i := range out {
+		out[i].Ref = strconv.FormatInt(id, 10) + ":" + strconv.Itoa(i)
 	}
-	if len(items) == 0 {
-		return nil, ui.Hide(ctx, h)
+	e.shows[id] = &shown{c: c, items: out, timeout: timeout}
+	e.showOrder = append(e.showOrder, id)
+	for len(e.showOrder) > keepShown {
+		delete(e.shows, e.showOrder[0])
+		e.showOrder = e.showOrder[1:]
 	}
-	if err := ui.Show(ctx, h, ShowRequest{Context: &c, Col: start + 1, Items: items}); err != nil {
-		log.Printf("cmp: ui %s: %v", ui.Name(), err)
+	return out
+}
+
+func (e *engine) lookup(params []any) (Item, *shown, error) {
+	if len(params) == 0 {
+		return Item{}, nil, fmt.Errorf("a reference is needed")
+	}
+	ref, _ := params[0].(string)
+	idStr, idxStr, ok := strings.Cut(ref, ":")
+	id, err1 := strconv.ParseInt(idStr, 10, 64)
+	idx, err2 := strconv.Atoi(idxStr)
+	if !ok || err1 != nil || err2 != nil {
+		return Item{}, nil, fmt.Errorf("bad reference %q", ref)
+	}
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	sh := e.shows[id]
+	if sh == nil || idx < 0 || idx >= len(sh.items) {
+		return Item{}, nil, fmt.Errorf("reference %q is no longer known", ref)
+	}
+	return sh.items[idx], sh, nil
+}
+
+func (e *engine) done(ctx context.Context, h sdk.Host, params []any) (any, error) {
+	it, sh, err := e.lookup(params)
+	if err != nil {
 		return nil, err
 	}
-	return len(items), nil
+	d, ok := e.b.sources[it.Source].(CompleteDoner)
+	if !ok {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
+	defer cancel()
+	_, err = sdk.Guard(ctx, func() (struct{}, error) {
+		return struct{}{}, d.OnCompleteDone(ctx, h, DoneArgs{Context: sh.c, Item: it})
+	})
+	if err != nil {
+		log.Printf("cmp: source %s: onCompleteDone: %v", it.Source, err)
+	}
+	return nil, err
+}
+
+func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*Item, error) {
+	it, sh, err := e.lookup(params)
+	if err != nil {
+		return nil, err
+	}
+	r, ok := e.b.sources[it.Source].(Resolver)
+	if !ok {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
+	defer cancel()
+	out, err := sdk.Guard(ctx, func() (Item, error) {
+		return r.Resolve(ctx, h, DoneArgs{Context: sh.c, Item: it})
+	})
+	if err != nil {
+		log.Printf("cmp: source %s: resolve: %v", it.Source, err)
+		return nil, err
+	}
+	out.Ref = it.Ref
+	out.Source = it.Source
+	// Keep the resolved item for a later done.
+	e.mu.Lock()
+	if id, idx, ok := splitRef(it.Ref); ok {
+		if s := e.shows[id]; s != nil && idx < len(s.items) {
+			s.items[idx] = out
+		}
+	}
+	e.mu.Unlock()
+	return &out, nil
+}
+
+func (e *engine) resolve(ctx context.Context, h sdk.Host, params []any) (any, error) {
+	it, err := e.resolveItem(ctx, h, params)
+	if err != nil || it == nil {
+		return nil, err
+	}
+	return sdk.Generic(*it)
+}
+
+func (e *engine) selectItem(ctx context.Context, h sdk.Host, params []any) (any, error) {
+	it, err := e.resolveItem(ctx, h, params)
+	if err != nil || it == nil {
+		return nil, err
+	}
+	_, err = h.Call(ctx, "goda_cmp#_resolved", map[string]any{"ref": it.Ref, "item": it})
+	return nil, err
+}
+
+func splitRef(ref string) (int64, int, bool) {
+	a, b, ok := strings.Cut(ref, ":")
+	id, err1 := strconv.ParseInt(a, 10, 64)
+	idx, err2 := strconv.Atoi(b)
+	return id, idx, ok && err1 == nil && err2 == nil
+}
+
+// ensureInit runs the source's Init once. The first request that needs it
+// starts it; others wait for it. Init is not tied to a request, so a request
+// that is superseded does not abort it.
+func (e *engine) ensureInit(ctx context.Context, h sdk.Host, name string, src Source, timeout time.Duration) error {
+	in, ok := src.(Initializer)
+	if !ok {
+		return nil
+	}
+	e.mu.Lock()
+	st := e.inits[name]
+	if st == nil {
+		st = &initState{done: make(chan struct{})}
+		e.inits[name] = st
+		go func() {
+			ictx, cancel := context.WithTimeout(context.Background(), timeout)
+			defer cancel()
+			_, err := sdk.Guard(ictx, func() (struct{}, error) { return struct{}{}, in.Init(ictx, h) })
+			st.err = err
+			close(st.done)
+		}()
+	}
+	e.mu.Unlock()
+	select {
+	case <-st.done:
+		return st.err
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+// Close closes the sources that implement Closer, in the reverse order of
+// their registration. goda.vim's host calls it (sdk.Closer) when the plugin
+// stops.
+func (e *engine) Close(ctx context.Context) error {
+	var errs []string
+	for i := len(e.b.sourceOrder) - 1; i >= 0; i-- {
+		name := e.b.sourceOrder[i]
+		c, ok := e.b.sources[name].(Closer)
+		if !ok {
+			continue
+		}
+		if _, err := sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, c.Close(ctx) }); err != nil {
+			errs = append(errs, fmt.Sprintf("source %s: %v", name, err))
+		}
+	}
+	if len(errs) > 0 {
+		return fmt.Errorf("%s", strings.Join(errs, "; "))
+	}
+	return nil
 }
 
 func (e *engine) ui(name string) (UI, error) {

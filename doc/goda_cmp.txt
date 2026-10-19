@@ -1,0 +1,286 @@
+*goda_cmp.txt*	Completion for Vim/Neovim on goda.vim
+
+License: MIT license
+
+CONTENTS						*goda-cmp-contents*
+
+Introduction		|goda-cmp-introduction|
+Install			|goda-cmp-install|
+Functions		|goda-cmp-functions|
+Variables		|goda-cmp-variables|
+Configuration		|goda-cmp-config|
+Run-time patches	|goda-cmp-patch|
+Selecting candidates	|goda-cmp-select|
+Popup			|goda-cmp-popup|
+Extensions		|goda-cmp-extension|
+Partial results		|goda-cmp-partial|
+FAQ			|goda-cmp-faq|
+
+==============================================================================
+INTRODUCTION						*goda-cmp-introduction*
+
+goda-cmp.vim is a completion plugin built on goda.vim (|goda.txt|).  It is a
+successor in spirit to ddc.vim: sources and filters are separate extensions,
+the popup is either Vim's native one or pum.vim, and the configuration is
+code, a small Go program you own.
+
+There is no plugin loader and no manifest: an extension is a Go package that
+your `main.go` imports, so versions are pinned by your `go.mod` and your
+editor type-checks and completes the configuration.
+
+==============================================================================
+INSTALL							*goda-cmp-install*
+
+Requirements: Go 1.24 or later; Vim 9.1 or later (|+job| |+channel|
+|+timers|) or Neovim; goda.vim; pum.vim if you want the pum popup.
+
+1. Install goda.vim and goda-cmp.vim with your plugin manager.
+
+2. Create your configuration, a Go module of your own: `main.go`, `config.go`,
+   `go.mod`, `go.sum`.  Keep it with the rest of your editor configuration.
+   The default place is `~/.vim/goda-cmp` for Vim and
+   `stdpath('config')/goda-cmp` for Neovim; see |g:goda_cmp#config_dir|. >
+
+	mkdir -p ~/.vim/goda-cmp && cd ~/.vim/goda-cmp
+	cp /path/to/goda-cmp.vim/examples/config/{main.go,config.go} .
+	go mod init goda-cmp-config
+	go get github.com/Shougo/goda-cmp.vim@latest
+	go mod tidy
+<
+3. Add to your vimrc: >
+
+	autocmd VimEnter * call goda_cmp#enable()
+	inoremap <expr> <C-n> pumvisible() ? "\<C-n>"
+	      \ : "\<Cmd>call goda_cmp#complete()\<CR>"
+<
+4. Build and start: >
+
+	:call goda_cmp#build()
+	:call goda_cmp#enable()
+<
+The binary is not put in the configuration directory: it depends on your
+machine, so it goes to a cache directory (see |g:goda_cmp#binary|).
+
+The binary has to be built again after you edit `main.go` or `config.go`, or
+update goda.vim, goda-cmp.vim or an extension: >
+
+	go get -u github.com/Shougo/goda-cmp.vim github.com/Shougo/goda.vim
+	go mod tidy
+<
+and |goda_cmp#build()|.  To build whenever you save the configuration: >
+
+	autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#build()
+<
+==============================================================================
+FUNCTIONS						*goda-cmp-functions*
+
+							*goda_cmp#build()*
+goda_cmp#build()
+		Run `go build` in |g:goda_cmp#config_dir|.  When completion is
+		running it is stopped first and started again with the new
+		binary.  When the build fails the error is thrown and the
+		previous binary keeps running.
+
+							*goda_cmp#enable()*
+goda_cmp#enable()
+		Start the binary and begin completing in insert mode.  When
+		the binary does not exist yet a hint is shown instead.
+
+							*goda_cmp#disable()*
+goda_cmp#disable()
+		Stop completing and stop the binary.
+
+							*goda_cmp#complete()*
+goda_cmp#complete()
+		Complete now, whatever the length of the typed word.
+
+							*goda_cmp#hide()*
+goda_cmp#hide()
+		Close the popup.
+
+							*goda_cmp#patch_global()*
+goda_cmp#patch_global({patch})
+goda_cmp#patch_filetype({filetype}, {patch})
+goda_cmp#patch_buffer({patch})
+		Merge {patch} into the settings; see |goda-cmp-patch|.
+
+							*goda_cmp#get_global()*
+goda_cmp#get_global()
+goda_cmp#get_filetype({filetype})
+goda_cmp#get_buffer()
+		Return a copy of the patches made from Vim script.
+
+							*goda_cmp#set_global()*
+goda_cmp#set_global({config})
+goda_cmp#set_filetype({filetype}, {config})
+goda_cmp#set_buffer({config})
+		Replace the patches made from Vim script.
+
+==============================================================================
+VARIABLES						*goda-cmp-variables*
+
+							*g:goda_cmp#config_dir*
+g:goda_cmp#config_dir
+		Directory of your configuration module.
+		Default: `~/.vim/goda-cmp`, or `stdpath('config')/goda-cmp`
+		in Neovim.
+
+							*g:goda_cmp#binary*
+g:goda_cmp#binary
+		The built binary.  Default: `goda-cmp` in
+		`$XDG_CACHE_HOME/vim` or `~/.cache/vim` (Vim),
+		`stdpath('cache')` (Neovim).
+
+==============================================================================
+CONFIGURATION						*goda-cmp-config*
+
+The configuration is Go code; see `examples/config`.  Its shape mirrors
+`ddc.ts`: >
+
+	b := cmp.New()
+	b.AddSource(around.New(around.Params{MinLength: 2}))
+	b.AddFilter(matcherhead.New(matcherhead.Params{}))
+	b.PatchGlobal(cmp.Config{
+	    UI:      "native",
+	    Sources: []string{"around"},
+	    SourceOptions: map[string]cmp.SourceOption{
+	        "_":      {Matchers: []string{"matcher_head"}},
+	        "around": {Mark: "A"},
+	    },
+	})
+	b.PatchFiletype("markdown", cmp.Config{})
+	b.Main()
+<
+Patches merge field by field: unset fields keep the previous value, maps are
+merged by key, slices are replaced.  Options named "_" are inherited by every
+source.  A name used but never added is reported when the binary starts.
+
+Settings:
+	UI			"native" or "pum" (or a UI you added)
+	Sources			enabled sources, in order
+	SourceOptions		per source, "_" for all: Mark,
+				MinAutoCompleteLength, MaxItems, KeywordPattern,
+				Matchers, Sorters, Converters
+	PostFilters		filters run on the merged list
+	AutoComplete		completion while typing (default on)
+	AutoCompleteDelay	debounce in ms (default 0)
+	PartialInterval		least ms between popup updates while a
+				|goda-cmp-partial| source answers (default 50)
+	SourceTimeout		bound for every source and filter in ms
+
+Where zero is a real value the field is a pointer: `cmp.Ptr(0)`.
+KeywordPattern is a regular expression in Go's RE2 syntax (no lookaround) for
+the text before the cursor; the match must end at the cursor.
+
+`DynamicSources` and `DynamicUI` are functions and can only be set in Go.
+
+==============================================================================
+RUN-TIME PATCHES					*goda-cmp-patch*
+
+Extensions are fixed when you build; settings are not.  Vim script can patch
+them at any time: >
+
+	call goda_cmp#patch_global({'ui': 'pum'})
+	call goda_cmp#patch_filetype('go', {'sources': ['around']})
+	let prev = goda_cmp#get_buffer()
+	call goda_cmp#patch_buffer({'sourceOptions':
+	      \ {'_': {'keywordPattern': '[0-9a-zA-Z_:#*/.-]*'}}})
+	call goda_cmp#set_buffer(prev)
+<
+A patch is a dictionary with the keys of `cmp.Config`.  Settings apply in this
+order, the later one winning: global (Go, then Vim script), filetype (Go,
+then Vim script), buffer.  They are kept in Vim script: they survive a
+restart of the binary and go away with the buffer.  An invalid patch (unknown
+key, wrong type, unknown name) is refused with an error.  `sourceParams`
+cannot be patched from Vim script.
+
+==============================================================================
+SELECTING CANDIDATES					*goda-cmp-select*
+
+Nothing is inserted until you select a candidate.
+
+With the native popup the usual keys work:
+	<C-n> <C-p>	select the next / previous candidate (and insert it)
+	<C-y>		accept the selected candidate
+	<C-e>		cancel, restoring what you typed
+
+With pum.vim map the keys to its functions: >
+
+	inoremap <C-n> <Cmd>call pum#map#insert_relative(+1)<CR>
+	inoremap <C-p> <Cmd>call pum#map#insert_relative(-1)<CR>
+	inoremap <C-y> <Cmd>call pum#map#confirm()<CR>
+	inoremap <C-e> <Cmd>call pum#map#cancel()<CR>
+<
+You need not set 'completeopt': with the native popup goda-cmp makes sure
+that nothing is inserted until you select, and restores your value when you
+leave insert mode.
+
+==============================================================================
+POPUP							*goda-cmp-popup*
+
+UI "native" uses Vim's popup menu; UI "pum" uses pum.vim, configured in Vim
+script as usual (`pum#set_option()`, `pum#map#...`).  The UI can differ per
+filetype.
+
+==============================================================================
+EXTENSIONS						*goda-cmp-extension*
+
+An extension is a Go module implementing an interface of package `cmp` and
+exporting a constructor.  `Source` has `Name` and `Gather`; `Filter` has
+`Name` and `Filter`.  A source that fails, panics or times out is skipped for
+that request; the others still answer.
+
+A source for a language server can implement more.  The engine looks for each
+interface with a type assertion, so extensions written without them keep
+working:
+	StreamSource	GatherStream: hand over candidates as they arrive
+	Initializer	Init: start something once, in the first request
+	CompleteDoner	OnCompleteDone: act when a candidate is accepted
+	Resolver	Resolve: fill in an item when it is selected
+	Closer		Close: release resources when the plugin stops
+
+`Item` also has FilterText and SortText (LSP filterText and sortText), Dup,
+and UserData, which stays in the plugin process and comes back in
+OnCompleteDone and Resolve.
+
+Sources keep their own caches: the engine asks a source on every request, so
+a source that got a complete answer can filter it itself for the next
+keystrokes.
+
+`Close` is called through goda.vim's `sdk.Closer`; it needs a goda.vim that
+has it.  `Resolve` shows its result through `pum#update_current_item()` with
+pum.vim, and in the native popup only when 'completeopt' has "popup" and the
+item already had an info.
+
+Extensions of this project are named `goda-cmp-source-{name}` and
+`goda-cmp-filter-{name}`, with the package `{name}` and the constructor
+`New(opts ...Option)`.
+
+==============================================================================
+PARTIAL RESULTS						*goda-cmp-partial*
+
+A StreamSource emits candidates as they arrive; every emit replaces what the
+source emitted before in the request.  While one is running, the popup is
+updated at most every `PartialInterval` milliseconds, and items emitted
+before a timeout are kept.
+
+Limitation of the native popup~
+The native popup is replaced as a whole with |complete()|, which drops the
+selection.  So while nothing is selected, later results are added to the
+popup; once you have selected a candidate, results that arrive later are not
+shown, so that the popup does not change under you.  Select nothing or press
+<C-e> and type again to see them.  pum.vim does not have this limitation.
+
+==============================================================================
+FAQ							*goda-cmp-faq*
+
+Q: Nothing is offered.
+A: Check `:echo goda#plugins()` (it should list "cmp") and `:echo goda#log()`.
+
+Q: The handshake or "protocol" error when starting.
+A: The binary was built with a different version of the goda.vim module than
+   the goda.vim plugin.  Run `go get -u github.com/Shougo/goda.vim` in the
+   configuration directory and |goda_cmp#build()|.
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:

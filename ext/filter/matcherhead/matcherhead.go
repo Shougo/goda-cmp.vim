@@ -32,7 +32,7 @@ func (f filter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error
 	}
 	out := make([]cmp.Item, 0, len(in.Items))
 	for _, it := range in.Items {
-		w := it.Word
+		w := it.Filter()
 		if fold {
 			w = strings.ToLower(w)
 		}

@@ -61,6 +61,9 @@ function! PatchBad() abort
   call writefile([json_encode({'error': l:err, 'buffer': goda_cmp#get_buffer()})], $GODA_OUT, 'a')
   return ''
 endfunction
-inoremap <C-g> <Cmd>call PatchOff()<CR>
-inoremap <C-t> <Cmd>call PatchRestore()<CR>
-inoremap <C-y> <Cmd>call PatchBad()<CR>
+" $GODA_NO_PATCH_MAPS leaves the keys alone (Ctrl-Y accepts a candidate).
+if empty($GODA_NO_PATCH_MAPS)
+  inoremap <C-g> <Cmd>call PatchOff()<CR>
+  inoremap <C-t> <Cmd>call PatchRestore()<CR>
+  inoremap <C-y> <Cmd>call PatchBad()<CR>
+endif

@@ -19,8 +19,10 @@ import (
 //	b.Main()
 type Builder struct {
 	sources map[string]Source
-	filters map[string]Filter
-	uis     map[string]UI
+	// sourceOrder is the order of AddSource; Close runs in reverse.
+	sourceOrder []string
+	filters     map[string]Filter
+	uis         map[string]UI
 
 	global Config
 	ft     map[string]Config
@@ -51,6 +53,7 @@ func (b *Builder) AddSource(s Source) *Builder {
 		b.fail("source %q registered twice", s.Name())
 	}
 	b.sources[s.Name()] = s
+	b.sourceOrder = append(b.sourceOrder, s.Name())
 	return b
 }
 

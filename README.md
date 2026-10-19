@@ -127,7 +127,7 @@ when the binary starts (`echo goda#log()`).
 
 Settings: `UI`, `Sources`, `SourceOptions` (`Mark`, `MinAutoCompleteLength`,
 `MaxItems`, `KeywordPattern`, `Matchers`, `Sorters`, `Converters`),
-`PostFilters`, `AutoComplete`, `AutoCompleteDelay`, `SourceTimeout`. Where zero
+`PostFilters`, `AutoComplete`, `AutoCompleteDelay`, `PartialInterval`, `SourceTimeout`. Where zero
 is a real value the field is a pointer: `cmp.Ptr(0)`.
 
 `KeywordPattern` is a regular expression in Go's RE2 syntax (no lookaround); it
@@ -227,7 +227,40 @@ A source may call the editor through `h` (`h.Call(ctx, "getbufline", ...)`).
 Whether a filter is a matcher, sorter or converter depends only on the list
 it is placed in. A source that fails, panics or times out is skipped for that
 request; the others still answer. `cmp/cmptest` offers a fake editor for unit
-tests. See `ext/` for four small examples.
+tests. See `ext/` for small examples.
+
+### Optional interfaces
+
+The two interfaces above are all a simple extension needs. A source that talks
+to a language server can implement more; the engine looks for each one with a
+type assertion, so extensions written without them keep working.
+
+| interface | for |
+| --- | --- |
+| `StreamSource` (`GatherStream`) | hand over candidates as they arrive. Every `emit` replaces what the source emitted before in the request. While one is running the popup is updated at most every `partialInterval` ms (default 50) and `ShowRequest.Final` tells a UI whether more may come. Items emitted before a timeout are kept. `cmp.Collect` implements `Gather` on top of it. |
+| `Initializer` (`Init`) | start something once (a connection, an index). Runs in the first request that needs the source; if it fails the source is off for the rest of the process. |
+| `CompleteDoner` (`OnCompleteDone`) | act when the user accepts one of the source's candidates, e.g. apply an LSP `additionalTextEdits`. |
+| `Closer` (`Close`) | release resources (a language server process) when the plugin stops: the editor went away or `goda#stop()` was called. Needs a goda.vim that has `sdk.Closer`. |
+| `Resolver` (`Resolve`) | fill in an item when it is selected (LSP `completionItem/resolve`). The result reaches pum.vim through `pum#update_current_item()`, and the native popup when it has an info popup (`completeopt` has `popup`). |
+
+`Item` also has `FilterText` and `SortText` (matchers use `Item.Filter()`,
+`sorter_text` uses `Item.Sort()`), `Dup`, and `UserData`, which stays in the
+plugin process and comes back in `OnCompleteDone` and `Resolve`.
+
+Sources keep their own caches: the engine asks a source on every request, so
+an LSP source that got a complete (not `isIncomplete`) answer can filter it
+itself for the next keystrokes.
+
+**Limitation of the native popup.** It is replaced as a whole with
+`complete()`, which drops the selection. So while nothing is selected, later
+partial results are added to the popup; once the user has selected a
+candidate, results that arrive later are not shown, so that the popup does not
+change under them (press `<C-e>` and type again to see them). pum.vim does not
+have this limitation.
+
+## Help
+
+`:help goda_cmp` (doc/goda_cmp.txt).
 
 ## Tests
 
@@ -244,11 +277,10 @@ lines in `go.mod` and `examples/config/go.mod` are to be removed after that.
 ## Not implemented yet
 
 Compared with ddc.vim: command-line completion (`Context.Mode` is reserved for
-it), `forceCompletionPattern`, volatile sources, `sourceParams` set from Vim
-script (parameters are Go values given to the constructor), per-source `dup`, `ignoreCase`
-options, user-defined `isVolatile`, and snippet/`user_data` expansion hooks.
-Text inserted by selecting an item is meant not to start a new request
-(native: `complete_info()`, pum: `pum#skip_complete()`); this is untested.
+it), `forceCompletionPattern`, `sourceParams` set from Vim script (parameters
+are Go values given to the constructor), and `ignoreCase` options.
+`Resolve` and `OnCompleteDone` are tested with pum.vim
+only through a stand-in; how a resolved `Info` is drawn is up to pum.vim.
 
 ## License
 

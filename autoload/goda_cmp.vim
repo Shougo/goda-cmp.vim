@@ -97,6 +97,10 @@ function! goda_cmp#enable() abort
     autocmd TextChangedI * call s:on_change('TextChangedI')
     autocmd TextChangedP * call s:on_change('TextChangedP')
     autocmd InsertLeave * call goda_cmp#hide() | call s:restore_completeopt()
+    autocmd CompleteDone * call s:on_done(v:completed_item)
+    autocmd CompleteChanged * call s:on_select(get(v:event, 'completed_item', {}))
+    autocmd User PumCompleteDone call s:on_done(get(g:, 'pum#completed_item', {}))
+    autocmd User PumCompleteChanged call s:on_select(exists('*pum#current_item') ? pum#current_item() : {})
   augroup END
 endfunction
 
@@ -318,8 +322,70 @@ function! s:restore_completeopt() abort
   endif
 endfunction
 
+" The user_data of a candidate is a reference the plugin gave it (see
+" Item.Ref); a source's OnCompleteDone and Resolve are reached through it.
+function! s:ref(item) abort
+  if type(a:item) != v:t_dict
+    return ''
+  endif
+  let l:ref = get(a:item, 'user_data', '')
+  return type(l:ref) == v:t_string ? l:ref : ''
+endfunction
+
+function! s:on_done(item) abort
+  let s:selected_ref = ''
+  let l:ref = s:ref(a:item)
+  if l:ref !=# ''
+    " Accepting inserted nothing new: the TextChangedI that may follow must
+    " not start another completion for the word that was just completed.
+    if s:timer != -1
+      call timer_stop(s:timer)
+      let s:timer = -1
+    endif
+    let s:last = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  endif
+  if l:ref !=# '' && goda#is_running('cmp') && get(v:event, 'reason', 'accept') !=# 'cancel'
+    call goda#notify('cmp', 'done', l:ref)
+  endif
+endfunction
+
+" Tell the plugin which candidate is selected, so that its source can resolve
+" it (LSP completionItem/resolve). The answer comes back to goda_cmp#_resolved.
+let s:selected_ref = ''
+function! s:on_select(item) abort
+  let s:selected_ref = s:ref(a:item)
+  if s:selected_ref !=# '' && goda#is_running('cmp')
+    call goda#notify('cmp', 'select', s:selected_ref)
+  endif
+endfunction
+
+function! goda_cmp#_resolved(r) abort
+  if a:r.ref !=# s:selected_ref
+    return 0
+  endif
+  let l:info = get(a:r.item, 'info', '')
+  if l:info ==# ''
+    return 0
+  endif
+  if exists('*pum#update_current_item') && exists('*pum#visible') && pum#visible()
+    call pum#update_current_item({'info': l:info})
+  elseif exists('*popup_findinfo')
+    " only possible when 'completeopt' has "popup" and the item had an info
+    let l:id = popup_findinfo()
+    if l:id > 0
+      call popup_settext(l:id, split(l:info, "\n"))
+    endif
+  endif
+  return 1
+endfunction
+
 function! goda_cmp#_native_show(r) abort
   if !s:fresh(a:r)
+    return 0
+  endif
+  " While sources are still answering, do not take the popup away from a user
+  " who is choosing: complete() would drop the selection.
+  if !a:r.final && get(complete_info(['selected']), 'selected', -1) >= 0
     return 0
   endif
   call s:set_completeopt()
