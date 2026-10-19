@@ -63,7 +63,9 @@ function! goda_cmp#build() abort
 
   let l:was_enabled = exists('s:enabled')
   call goda_cmp#disable()
-  let l:out = system('cd ' . shellescape(l:dir) . ' && go build -o ' . shellescape(l:bin) . ' .')
+  " One command, no cd and no &&: the latter differs between shells (cmd.exe,
+  " PowerShell, sh). "go -C" runs go in that directory (Go 1.20 or later).
+  let l:out = system('go -C ' . shellescape(l:dir) . ' build -o ' . shellescape(l:bin) . ' .')
   let l:failed = v:shell_error
   if l:was_enabled
     call goda_cmp#enable()
