@@ -141,6 +141,41 @@ func TestMinAutoCompleteLengthAndManual(t *testing.T) {
 	}
 }
 
+// forceCompletionPattern overrides MinAutoCompleteLength (as in ddc.vim),
+// also for an empty word: "x." asks a source that completes after the dot.
+func TestForceCompletionPattern(t *testing.T) {
+	b := cmp.New()
+	b.AddSource(fakeSource{name: "s", items: []string{"member"}})
+	b.AddSource(fakeSource{name: "t", items: []string{"other"}})
+	b.PatchGlobal(cmp.Config{
+		Sources: []string{"s", "t"},
+		SourceOptions: map[string]cmp.SourceOption{
+			"_": {MinAutoCompleteLength: cmp.Ptr(2)},
+			"s": {ForceCompletionPattern: `\.\w*`},
+		},
+	})
+	for i, c := range []struct {
+		input string
+		want  []string
+	}{
+		{"x.", []string{"member"}},  // forced, empty word
+		{"x.m", []string{"member"}}, // forced, word shorter than 2
+		{"x m", nil},                // neither forced nor long enough
+		{"x me", []string{"member", "other"}},
+	} {
+		h := uiHost()
+		complete(t, b, h, ctxMap(int64(i+1), c.input, ""))
+		if _, w := shown(t, h); !reflect.DeepEqual(w, c.want) {
+			t.Errorf("%q: words = %q, want %q", c.input, w, c.want)
+		}
+	}
+	if err := cmp.New().AddSource(fakeSource{name: "s"}).PatchGlobal(cmp.Config{
+		SourceOptions: map[string]cmp.SourceOption{"s": {ForceCompletionPattern: "(x"}},
+	}).Validate(); err == nil || !strings.Contains(err.Error(), "forceCompletionPattern") {
+		t.Errorf("invalid pattern: %v", err)
+	}
+}
+
 func TestBrokenSourcesDoNotHurtOthers(t *testing.T) {
 	b := cmp.New()
 	b.AddSource(fakeSource{name: "good", items: []string{"one"}})
@@ -159,6 +194,20 @@ func TestBrokenSourcesDoNotHurtOthers(t *testing.T) {
 	}
 	if d := time.Since(start); d > 2*time.Second {
 		t.Errorf("a hanging source held the request for %v", d)
+	}
+}
+
+// A source that answered nothing (here: failed) must not take part in the
+// alignment: its slot has no start.
+func TestFailedSourceAndLaterStart(t *testing.T) {
+	b := cmp.New()
+	b.AddSource(fakeSource{name: "bad", err: errors.New("nope")})
+	b.AddSource(fakeSource{name: "good", items: []string{"bar"}})
+	b.PatchGlobal(cmp.Config{Sources: []string{"bad", "good"}})
+	h := uiHost()
+	complete(t, b, h, ctxMap(1, "foo ba", ""))
+	if col, w := shown(t, h); col != 5 || !reflect.DeepEqual(w, []string{"bar"}) {
+		t.Errorf("col=%d words=%q", col, w)
 	}
 }
 

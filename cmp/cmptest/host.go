@@ -16,7 +16,8 @@ type Call struct {
 	Args []any
 }
 
-// Host is an sdk.Host whose Vim functions are Go functions.
+// Host is an sdk.Host whose Vim functions are Go functions. Eval understands
+// calls of those functions (see Eval); Cmd always fails.
 type Host struct {
 	// Funcs maps a Vim function name to its fake. A call to a missing name
 	// fails like E117 does.
@@ -39,8 +40,7 @@ func (h *Host) Call(_ context.Context, fn string, args ...any) (any, error) {
 	return f(args...)
 }
 
-func (h *Host) Eval(context.Context, string) (any, error) { return nil, fmt.Errorf("cmptest: Eval") }
-func (h *Host) Cmd(context.Context, string) error         { return fmt.Errorf("cmptest: Cmd") }
+func (h *Host) Cmd(context.Context, string) error { return fmt.Errorf("cmptest: Cmd") }
 
 // Calls returns what was called so far.
 func (h *Host) Calls() []Call {
@@ -75,6 +75,8 @@ func toInt(v any) int {
 	case int:
 		return n
 	case int64:
+		return int(n)
+	case float64:
 		return int(n)
 	}
 	return 0

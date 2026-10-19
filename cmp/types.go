@@ -36,8 +36,8 @@ type Context struct {
 	Col      int    `json:"col"`   // 1-based byte column of the cursor
 	Input    string `json:"input"` // the text of the line before the cursor
 	Filetype string `json:"filetype"`
-	// Manual is set when the user asked for completion explicitly; sources
-	// then ignore MinAutoCompleteLength.
+	// Manual is set when the user asked for completion explicitly;
+	// MinAutoCompleteLength is ignored then.
 	Manual bool `json:"manual"`
 	// Mode is "i" (insert mode). "c" (command line) is reserved.
 	Mode string `json:"mode"`

@@ -14,6 +14,7 @@ Selecting candidates	|goda-cmp-select|
 Popup			|goda-cmp-popup|
 Extensions		|goda-cmp-extension|
 Partial results		|goda-cmp-partial|
+Language servers	|goda-cmp-lsp|
 FAQ			|goda-cmp-faq|
 
 ==============================================================================
@@ -160,7 +161,8 @@ Settings:
 	Sources			enabled sources, in order
 	SourceOptions		per source, "_" for all: Mark,
                                 MinAutoCompleteLength, MaxItems,
-                                KeywordPattern, Matchers, Sorters, Converters
+                                KeywordPattern, ForceCompletionPattern,
+                                Matchers, Sorters, Converters
 	PostFilters		filters run on the merged list
 	AutoComplete		completion while typing (default on)
 	AutoCompleteDelay	debounce in ms (default 0)
@@ -171,6 +173,9 @@ Settings:
 Where zero is a real value the field is a pointer: `cmp.Ptr(0)`.
 KeywordPattern is a regular expression in Go's RE2 syntax (no lookaround) for
 the text before the cursor; the match must end at the cursor.
+ForceCompletionPattern is one too, matched the same way: when it matches,
+MinAutoCompleteLength is ignored for that source, as in ddc.vim.  `\.\w*`
+completes members right after the dot.
 
 `DynamicSources` and `DynamicUI` are functions and can only be set in Go.
 
@@ -252,6 +257,13 @@ has it.  `Resolve` shows its result through `pum#update_current_item()` with
 pum.vim, and in the native popup only when 'completeopt' has "popup" and the
 item already had an info.
 
+Package `cmp/cmptest` is a fake editor for testing extensions without Vim.
+`cmptest.Host` answers calls with Go functions (`Funcs`) and evaluates simple
+expressions made of those calls, lists, strings and numbers.
+`cmptest.NewEditor()` adds buffers, a cursor and the buffer functions
+(getbufline(), setbufline(), appendbufline(), deletebufline(), ...), which
+behave like Vim's, for sources that read or change buffers.
+
 Extensions of this project are named `goda-cmp-source-{name}` and
 `goda-cmp-filter-{name}`, with the package `{name}` and the constructor
 `New(opts ...Option)`.
@@ -270,6 +282,77 @@ selection.  So while nothing is selected, later results are added to the
 popup; once you have selected a candidate, results that arrive later are not
 shown, so that the popup does not change under you.  Select nothing or press
 <C-e> and type again to see them.  pum.vim does not have this limitation.
+
+==============================================================================
+LANGUAGE SERVERS                                                *goda-cmp-lsp*
+
+Package `ext/source/lsp` is a source backed by a language server, which it
+starts itself as a child process (one per project root) and talks to over
+stdio.  It works the same in Vim and Neovim, since it does not use either
+editor's LSP client.
+
+The source carries no settings of its own for any server: you write them in
+your config.go, like the parameters of any source.  Add the source once per
+server, each under its own name: >
+
+	b.AddSource(lsp.New(lsp.Params{
+	    Name:        "gopls",
+	    Command:     []string{"gopls"},
+	    Filetypes:   []string{"go", "gomod"},
+	    RootMarkers: []string{"go.work", "go.mod", ".git"},
+	    // Settings answer workspace/configuration.
+	    Settings: map[string]any{"gopls": map[string]any{
+	        "usePlaceholders": false,
+	    }},
+	}))
+	b.AddFilter(sortertext.New())
+	b.PatchGlobal(cmp.Config{
+	    Sources: []string{"gopls", "around"},
+	    SourceOptions: map[string]cmp.SourceOption{
+	        "gopls": {
+	            Mark:                   "LSP",
+	            ForceCompletionPattern: `\.\w*`,
+	            Matchers:               []string{},
+	            Sorters:                []string{"sorter_text"},
+	        },
+	    },
+	})
+<
+The source options matter:
+	forceCompletionPattern	where the server completes without a word
+				typed yet, such as after "." (gopls) or "::"
+				and "->" (C++).  Without it the popup waits
+				for minAutoCompleteLength characters.
+	matchers		Most servers filter (fuzzily) themselves; an
+				empty list keeps their answer as it is.
+	sorters			sorter_text keeps the server's order.
+
+	ConfirmBehavior		(a Params field) what an accepted item does to
+				the rest of the word after the cursor, when
+				the server offers both: "insert" (default)
+				keeps it, "replace" replaces it.
+
+What it does:
+- The whole buffer is sent when its |b:changedtick| moved (full
+  synchronization; goda-cmp tells sources the text, not the changes).
+- Items are inserted with |complete()|, so one line each; snippets are not
+  requested, and when a server sends them anyway their placeholders are
+  turned into plain text.
+- Selecting an item resolves it (documentation in the info).
+- Accepting an item replaces the text after the cursor that its edit covers
+  (see ConfirmBehavior), then applies its additionalTextEdits, such as the
+  import of a package that was not imported yet, and keeps the cursor where
+  it was.
+- When the plugin stops, the servers are shut down.
+
+When items start at different columns (gopls' postfix completions start at
+the expression, not at the word), all are aligned to the leftmost column: the
+text in between becomes part of the other words, and the popup shows them
+without it.
+
+Not done: commands attached to items, edits that start on another line, and
+closing documents (didClose), since sources are not told about closed
+buffers.
 
 ==============================================================================
 FAQ                                                             *goda-cmp-faq*

@@ -131,6 +131,9 @@ func (r *runner) merge() ([]Item, int, []string) {
 	}
 	var merged []Item
 	for _, s := range slots {
+		if len(s.items) == 0 {
+			continue // its start means nothing (0 when it never answered)
+		}
 		prefix := r.c.Input[minStart:s.start]
 		for _, it := range s.items {
 			if prefix != "" {
@@ -192,6 +195,27 @@ func (r *runner) gatherOne(ctx context.Context, i int) {
 		sc.keyword = re
 	}
 
+	// MinAutoCompleteLength, unless the user asked or forceCompletionPattern
+	// matches (ddc.vim's rule). The word before the cursor decides whether
+	// the source is asked at all; what the source answers is checked again
+	// below, against its own start.
+	force := c.Manual
+	if !force && opt.ForceCompletionPattern != "" {
+		re, err := e.keyword(opt.ForceCompletionPattern)
+		if err != nil {
+			log.Printf("cmp: source %s: %v", name, err)
+			return
+		}
+		force = re.MatchString(c.Input)
+	}
+	minLen := deref(opt.MinAutoCompleteLength, 1)
+	short := func(complete string) bool {
+		return !force && utf8.RuneCountInString(complete) < minLen
+	}
+	if short(c.Input[sc.KeywordStart():]) {
+		return
+	}
+
 	sctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 	if err := e.ensureInit(sctx, r.h, name, src, r.timeout); err != nil {
@@ -208,7 +232,7 @@ func (r *runner) gatherOne(ctx context.Context, i int) {
 			return nil, false
 		}
 		complete := c.Input[g.Start:]
-		if !c.Manual && utf8.RuneCountInString(complete) < deref(opt.MinAutoCompleteLength, 1) {
+		if short(complete) {
 			return nil, true
 		}
 		items := make([]Item, len(g.Items))

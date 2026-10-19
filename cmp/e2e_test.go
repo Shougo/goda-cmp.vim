@@ -67,12 +67,7 @@ func TestRealVim(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(cfgDir, "go.mod"), []byte(gomod), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = cfgDir
-	build.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if b, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("building examples/config: %v\n%s", err, b)
-	}
+	goBuild(t, cfgDir, bin)
 
 	text := filepath.Join(dir, "text.txt")
 	if err := os.WriteFile(text, []byte("foobar\nfoo_baz\nfoobarbaz\nzzz\n\n"), 0o644); err != nil {
@@ -196,13 +191,24 @@ func buildConfig(t *testing.T, srcDir string) (bin, repo, godaRoot string) {
 		t.Fatal(err)
 	}
 	bin = filepath.Join(dir, "goda-cmp")
-	build := exec.Command("go", "build", "-o", bin, ".")
-	build.Dir = cfgDir
-	build.Env = append(os.Environ(), "CGO_ENABLED=0")
-	if b, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("building %s: %v\n%s", srcDir, err, b)
-	}
+	goBuild(t, cfgDir, bin)
 	return bin, repo, godaRoot
+}
+
+// goBuild builds the configuration module in dir. The go.mod written by the
+// tests requires both modules at v0.0.0, while goda-cmp.vim's own go.mod asks
+// for a newer goda.vim; "go mod tidy" settles the requirements (offline: both
+// are replaced by local directories) so that go build does not refuse.
+func goBuild(t *testing.T, dir, bin string) {
+	t.Helper()
+	for _, args := range [][]string{{"mod", "tidy"}, {"build", "-o", bin, "."}} {
+		cmd := exec.Command("go", args...)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("go %s in %s: %v\n%s", strings.Join(args, " "), dir, err, b)
+		}
+	}
 }
 
 // TestRealVimStream: partial results arrive in a real Vim, a popup the user is

@@ -126,6 +126,7 @@ func TestValidateHandler(t *testing.T) {
 		"unknown ui":     {"ui": "popup"},
 		"unknown filter": {"sourceOptions": map[string]any{"a": map[string]any{"matchers": []any{"m"}}}},
 		"bad regexp":     {"sourceOptions": map[string]any{"_": map[string]any{"keywordPattern": "[a-"}}},
+		"bad force":      {"sourceOptions": map[string]any{"_": map[string]any{"forceCompletionPattern": "(x"}}},
 	} {
 		if _, err := validate(context.Background(), nil, []any{cfg}); err == nil {
 			t.Errorf("%s: no error", name)

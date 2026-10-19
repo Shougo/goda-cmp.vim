@@ -142,9 +142,12 @@ func (b *Builder) checkConfig(where string, cfg Config) []string {
 				}
 			}
 		}
-		if o.KeywordPattern != "" {
-			if _, err := keywordRegexp(o.KeywordPattern); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: source %q: %v", where, name, err))
+		for _, kp := range [][2]string{{"keywordPattern", o.KeywordPattern}, {"forceCompletionPattern", o.ForceCompletionPattern}} {
+			if kp[1] == "" {
+				continue
+			}
+			if _, err := keywordRegexp(kp[1]); err != nil {
+				errs = append(errs, fmt.Sprintf("%s: source %q: %s: %v", where, name, kp[0], err))
 			}
 		}
 	}

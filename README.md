@@ -76,7 +76,7 @@ lines in `go.mod` and `examples/config/go.mod` are to be removed after that.
 ## Not implemented yet
 
 Compared with ddc.vim: command-line completion (`Context.Mode` is reserved for
-it), `forceCompletionPattern`, `sourceParams` set from Vim script (parameters
+it), `sourceParams` set from Vim script (parameters
 are Go values given to the constructor), and `ignoreCase` options.
 `Resolve` and `OnCompleteDone` are tested with pum.vim
 only through a stand-in; how a resolved `Info` is drawn is up to pum.vim.

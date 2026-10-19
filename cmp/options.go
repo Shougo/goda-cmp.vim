@@ -34,6 +34,11 @@ type SourceOption struct {
 	// for the text before the cursor that is completed; the match must end
 	// at the cursor. Empty means letters, digits and underscores.
 	KeywordPattern string `json:"keywordPattern"`
+	// ForceCompletionPattern is a regular expression (RE2) for the text
+	// before the cursor; the match must end at the cursor. When it
+	// matches, MinAutoCompleteLength is ignored, as in ddc.vim: `\.` lets
+	// a language server complete members right after the dot.
+	ForceCompletionPattern string `json:"forceCompletionPattern"`
 
 	Matchers   []string `json:"matchers"`
 	Sorters    []string `json:"sorters"`
@@ -164,6 +169,9 @@ func mergeOption(base, p SourceOption) SourceOption {
 	if p.KeywordPattern != "" {
 		out.KeywordPattern = p.KeywordPattern
 	}
+	if p.ForceCompletionPattern != "" {
+		out.ForceCompletionPattern = p.ForceCompletionPattern
+	}
 	if p.Matchers != nil {
 		out.Matchers = p.Matchers
 	}
@@ -195,11 +203,12 @@ func deref[T any](p *T, def T) T {
 	return *p
 }
 
-// keywordRegexp compiles a keywordPattern so that it must end at the cursor.
+// keywordRegexp compiles a keywordPattern or a forceCompletionPattern so that
+// it must end at the cursor.
 func keywordRegexp(pattern string) (*regexp.Regexp, error) {
 	re, err := regexp.Compile("(?:" + pattern + ")$")
 	if err != nil {
-		return nil, fmt.Errorf("keywordPattern %q: %w", pattern, err)
+		return nil, fmt.Errorf("pattern %q: %w", pattern, err)
 	}
 	return re, nil
 }

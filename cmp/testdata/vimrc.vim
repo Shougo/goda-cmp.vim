@@ -16,14 +16,15 @@ function! DumpPopup() abort
     let l:visible = pumvisible()
     " What the user sees: complete_info().items comes back in reverse order
     " (checked in Vim 9.1), so read the popup rows from the screen instead.
+    " pum_getpos() says where the popup is (it may open above the cursor)
+    " and how many rows it shows (fewer than the items when they do not fit).
     let l:words = []
     if l:visible
-      let l:n = len(complete_info(['items']).items)
-      let l:before = strpart(getline('.'), 0, col('.') - 1)
-      let l:off = len(l:before) - len(matchstr(l:before, '\k*$'))
-      for l:i in range(1, l:n)
-        let l:row = join(map(range(1, 30), {_, c -> screenstring(screenrow() + l:i, c)}), '')
-        call add(l:words, split(trim(strcharpart(l:row, l:off)))[0])
+      let l:pos = pum_getpos()
+      for l:i in range(l:pos.height)
+        let l:row = join(map(range(l:pos.col + 1, l:pos.col + l:pos.width),
+              \ {_, c -> screenstring(l:pos.row + 1 + l:i, c)}), '')
+        call add(l:words, split(trim(l:row))[0])
       endfor
     endif
   endif
