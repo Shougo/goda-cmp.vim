@@ -4,7 +4,7 @@
 //
 // The server's settings are Go values in your config.go, like any other
 // source parameters. Add the source once per server, each under its own
-// name:
+// name (the package is github.com/Shougo/goda-cmp.vim/ext/source/lsp):
 //
 //	b.AddSource(lsp.New(lsp.Params{
 //		Name:        "gopls",

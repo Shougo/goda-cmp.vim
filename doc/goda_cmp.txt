@@ -307,6 +307,12 @@ The source carries no settings of its own for any server: you write them in
 your config.go, like the parameters of any source.  Add the source once per
 server, each under its own name: >go
 
+	import (
+	    "github.com/Shougo/goda-cmp.vim/cmp"
+	    "github.com/Shougo/goda-cmp.vim/ext/filter/sortertext"
+	    "github.com/Shougo/goda-cmp.vim/ext/source/lsp"
+	)
+
 	b.AddSource(lsp.New(lsp.Params{
 	    Name:        "gopls",
 	    Command:     []string{"gopls"},
