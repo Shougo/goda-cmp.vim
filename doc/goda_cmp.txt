@@ -326,7 +326,8 @@ server, each under its own name: >go
 	    }},
 	}))
 	b.AddFilter(sortertext.New())
-	b.PatchGlobal(cmp.Config{
+	// Only where the server works: its own filetypes.
+	b.PatchFiletypes([]string{"go", "gomod"}, cmp.Config{
 	    Sources: []string{"gopls", "around"},
 	    SourceOptions: map[string]cmp.SourceOption{
 	        "gopls": {
@@ -386,6 +387,14 @@ Q: The build says "go.mod requires go >= 1.26" (or similar).
 A: Your go command is older and does not download Go 1.26 by itself, usually
    because $GOTOOLCHAIN is "local" (some distributions set that).  Install
    Go 1.26 from https://go.dev/dl/, or set $GOTOOLCHAIN to "auto".
+
+Q: gopls (or go vet) says "new(10) requires go1.26 or later", with a newer
+   Go installed.
+A: The language version is the "go" line of the module's go.mod, not the
+   installed Go.  A configuration made with an older Go still says, for
+   instance, "go 1.24".  Run `go mod edit -go=1.26` in the configuration
+   directory (`go get` of a goda-cmp.vim that needs Go 1.26 does it too),
+   then restart gopls.
 
 Q: The handshake or "protocol" error when starting.
 A: The binary was built with a different version of the goda.vim module than
