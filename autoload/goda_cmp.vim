@@ -93,6 +93,17 @@ function! goda_cmp#enable() abort
     call goda#stop()
     throw 'goda-cmp: ' . s:default_bin() . ' does not contain the "cmp" plugin'
   endif
+  " A binary built from an invalid configuration starts anyway and says why.
+  try
+    let l:status = goda#request('cmp', 'status')
+  catch
+    let l:status = ''  " a binary from before cmp.status
+  endtry
+  if type(l:status) == v:t_string && l:status !=# ''
+    call goda#stop('cmp')
+    throw 'goda-cmp: fix the configuration in ' . s:config_dir()
+          \ . ' and run goda_cmp#build(): ' . l:status
+  endif
   let s:enabled = 1
   augroup goda_cmp
     autocmd!

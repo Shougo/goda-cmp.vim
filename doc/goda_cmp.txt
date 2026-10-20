@@ -85,7 +85,10 @@ goda_cmp#build()
                                                            *goda_cmp#enable()*
 goda_cmp#enable()
 		Start the binary and begin completing in insert mode.  When
-		the binary does not exist yet a hint is shown instead.
+		the binary does not exist yet a hint is shown instead.  When
+		it was built from a configuration with errors (an unknown
+		filter, say), it throws with those errors and stops the
+		binary.
 
                                                           *goda_cmp#disable()*
 goda_cmp#disable()

@@ -94,6 +94,10 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 		// event(ev): one autocmd event of a buffer, numbered by the Vim
 		// side. Meant as a notification.
 		"event": e.event,
+		// status() -> "" or the configuration error. A binary built from
+		// an invalid configuration still starts and answers this, so that
+		// the Vim side can show the error (see Builder.Main).
+		"status": func(context.Context, sdk.Host, []any) (any, error) { return "", nil },
 		// validate(config): checks a patch the Vim side is about to store.
 		"validate": e.validate,
 		// sources() -> sorted names, for diagnostics.

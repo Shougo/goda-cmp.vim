@@ -1,6 +1,7 @@
 package cmp
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -178,12 +179,40 @@ func (b *Builder) Plugin() (sdk.Plugin, error) {
 }
 
 // Main runs the plugin as the whole program: the last line of a config.go
-// main function. A configuration error ends the program with a message in the
-// plugin log (echo goda#log()).
+// main function.
+//
+// A configuration error does not end the program: it still starts, so that
+// goda_cmp#enable() can show the error in the editor (cmp.status), and every
+// other request fails with it. It is also written to the plugin log.
 func (b *Builder) Main() {
+	host.Main(b.mainPlugin())
+}
+
+// mainPlugin is the plugin Main serves: the engine, or with a configuration
+// error a stand-in that reports it.
+func (b *Builder) mainPlugin() sdk.Plugin {
 	p, err := b.Plugin()
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return brokenPlugin{err: err, methods: newEngine(b).Handlers()}
 	}
-	host.Main(p)
+	return p
+}
+
+// brokenPlugin answers status with the configuration error and fails every
+// other method of the engine with it.
+type brokenPlugin struct {
+	err     error
+	methods map[string]sdk.Handler
+}
+
+func (brokenPlugin) Name() string { return PluginName }
+
+func (p brokenPlugin) Handlers() map[string]sdk.Handler {
+	hs := make(map[string]sdk.Handler, len(p.methods))
+	for name := range p.methods {
+		hs[name] = func(context.Context, sdk.Host, []any) (any, error) { return nil, p.err }
+	}
+	hs["status"] = func(context.Context, sdk.Host, []any) (any, error) { return p.err.Error(), nil }
+	return hs
 }

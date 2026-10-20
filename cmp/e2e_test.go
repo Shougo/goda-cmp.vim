@@ -335,3 +335,52 @@ func TestRealVimEvents(t *testing.T) {
 		t.Errorf("events:\n%s\nwant:\n%s", b, want)
 	}
 }
+
+// TestRealVimBadConfig: a binary built from an invalid configuration starts,
+// and goda_cmp#enable() throws with the reason instead of a handshake error.
+func TestRealVimBadConfig(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts Vim")
+	}
+	vimBin, err := exec.LookPath("vim")
+	if err != nil {
+		t.Skip("vim is not installed")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/badcfg")
+	dir := t.TempDir()
+	out := filepath.Join(dir, "out.txt")
+	script := filepath.Join(dir, "test.vim")
+	vimscript := `set nocompatible
+let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . ',' . &runtimepath
+let g:goda_cmp#binary = $GODA_CMP_BIN
+try
+  call goda_cmp#enable()
+  let s:r = ['no error']
+catch
+  let s:r = [v:exception]
+endtry
+call add(s:r, 'running=' . goda#is_running('cmp'))
+call writefile(s:r, $GODA_OUT)
+qa!
+`
+	if err := os.WriteFile(script, []byte(vimscript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(vimBin, "-u", "NONE", "-i", "NONE", "-N", "-es", "-S", script)
+	cmd.Env = append(os.Environ(), "GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("vim: %v\n%s", err, b)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	t.Logf("%s", got)
+	if !strings.Contains(got, "fix the configuration") || !strings.Contains(got, `unknown filter "matcher_head"`) {
+		t.Errorf("enable() did not report the configuration error:\n%s", got)
+	}
+	if !strings.Contains(got, "running=0") {
+		t.Errorf("the binary was left running:\n%s", got)
+	}
+}
