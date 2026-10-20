@@ -305,7 +305,7 @@ editor's LSP client.
 
 The source carries no settings of its own for any server: you write them in
 your config.go, like the parameters of any source.  Add the source once per
-server, each under its own name: >
+server, each under its own name: >go
 
 	b.AddSource(lsp.New(lsp.Params{
 	    Name:        "gopls",
