@@ -60,7 +60,7 @@ func TestRealVim(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	gomod := "module goda-cmp-config\n\ngo 1.24\n\n" +
+	gomod := "module goda-cmp-config\n\ngo 1.26\n\n" +
 		"require (\n\tgithub.com/Shougo/goda-cmp.vim v0.0.0\n\tgithub.com/Shougo/goda.vim v0.0.0\n)\n\n" +
 		"replace github.com/Shougo/goda-cmp.vim => " + repo + "\n" +
 		"replace github.com/Shougo/goda.vim => " + godaRoot + "\n"
@@ -101,7 +101,7 @@ func TestRealVim(t *testing.T) {
 			t.Fatalf("Vim recorded nothing: %v", err)
 		}
 		var ds []dump
-		for _, l := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+		for l := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
 			var d dump
 			if err := json.Unmarshal([]byte(l), &d); err != nil {
 				t.Fatalf("bad record %q: %v", l, err)
@@ -183,7 +183,7 @@ func buildConfig(t *testing.T, srcDir string) (bin, repo, godaRoot string) {
 			t.Fatal(err)
 		}
 	}
-	gomod := "module goda-cmp-config\n\ngo 1.24\n\n" +
+	gomod := "module goda-cmp-config\n\ngo 1.26\n\n" +
 		"require (\n\tgithub.com/Shougo/goda-cmp.vim v0.0.0\n\tgithub.com/Shougo/goda.vim v0.0.0\n)\n\n" +
 		"replace github.com/Shougo/goda-cmp.vim => " + repo + "\n" +
 		"replace github.com/Shougo/goda.vim => " + godaRoot + "\n"
@@ -258,7 +258,7 @@ func TestRealVimStream(t *testing.T) {
 		t.Fatalf("Vim recorded nothing: %v", err)
 	}
 	var ds []dump
-	for _, l := range strings.Split(strings.TrimSpace(string(raw)), "\n") {
+	for l := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
 		var d dump
 		if err := json.Unmarshal([]byte(l), &d); err != nil {
 			t.Fatalf("bad record %q: %v", l, err)

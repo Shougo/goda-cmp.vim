@@ -99,7 +99,7 @@ func (b *Builder) PatchFiletypes(filetypes []string, c Config) *Builder {
 // applies the patches of each part in order.
 func (b *Builder) resolve(filetype string, rt Patches) Config {
 	cfg := merge(b.global, rt.Global)
-	for _, part := range strings.Split(filetype, ".") {
+	for part := range strings.SplitSeq(filetype, ".") {
 		if p, ok := b.ft[part]; ok {
 			cfg = merge(cfg, p)
 		}

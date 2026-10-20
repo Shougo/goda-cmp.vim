@@ -216,7 +216,7 @@ func (cl *client) setting(section string) any {
 	if section == "" {
 		return v
 	}
-	for _, part := range strings.Split(section, ".") {
+	for part := range strings.SplitSeq(section, ".") {
 		m, ok := v.(map[string]any)
 		if !ok {
 			return nil

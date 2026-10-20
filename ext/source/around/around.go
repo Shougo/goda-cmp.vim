@@ -56,7 +56,7 @@ func (s source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gat
 	seen := map[string]bool{typed: true} // never offer what is already typed
 	var items []cmp.Item
 	// Walk outwards from the cursor: distance 0, then +1/-1, ...
-	for d := 0; d < len(lines); d++ {
+	for d := range lines {
 		idx := []int{cur + d}
 		if d > 0 {
 			idx = append(idx, cur-d)

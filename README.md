@@ -9,7 +9,7 @@ Status: early. See "Not implemented yet".
 
 ## Try it
 
-You need Go 1.24 or newer, and Vim 9.1 or newer (with `+job +channel +timers`)
+You need Go 1.26 or newer, and Vim 9.1 or newer (with `+job +channel +timers`)
 or Neovim. Install `Shougo/goda.vim` and `Shougo/goda-cmp.vim` (and
 `Shougo/pum.vim` for the pum popup) with your plugin manager, then create your
 configuration, a Go module of your own, outside this repository (keep it in

@@ -76,7 +76,7 @@ func TestRuntimePatchMapsMerge(t *testing.T) {
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"a"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"a": {Mark: "A", MaxItems: cmp.Ptr(5)},
+			"a": {Mark: "A", MaxItems: new(5)},
 		},
 	})
 	h := uiHost()

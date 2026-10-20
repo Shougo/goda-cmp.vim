@@ -126,7 +126,7 @@ func TestMinAutoCompleteLengthAndManual(t *testing.T) {
 	b.AddSource(fakeSource{name: "s", items: []string{"alpha"}})
 	b.PatchGlobal(cmp.Config{
 		Sources:       []string{"s"},
-		SourceOptions: map[string]cmp.SourceOption{"_": {MinAutoCompleteLength: cmp.Ptr(3)}},
+		SourceOptions: map[string]cmp.SourceOption{"_": {MinAutoCompleteLength: new(3)}},
 	})
 	h := uiHost()
 	complete(t, b, h, ctxMap(1, "al", "")) // too short
@@ -150,7 +150,7 @@ func TestForceCompletionPattern(t *testing.T) {
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"s", "t"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"_": {MinAutoCompleteLength: cmp.Ptr(2)},
+			"_": {MinAutoCompleteLength: new(2)},
 			"s": {ForceCompletionPattern: `\.\w*`},
 		},
 	})
@@ -184,7 +184,7 @@ func TestBrokenSourcesDoNotHurtOthers(t *testing.T) {
 	b.AddSource(fakeSource{name: "hangs", block: true})
 	b.PatchGlobal(cmp.Config{
 		Sources:       []string{"bad", "panics", "hangs", "good"},
-		SourceTimeout: cmp.Ptr(100),
+		SourceTimeout: new(100),
 	})
 	h := uiHost()
 	start := time.Now()
@@ -237,7 +237,7 @@ func TestSourcesWithDifferentStartsAreAligned(t *testing.T) {
 	})
 	b2.PatchGlobal(cmp.Config{
 		Sources:       []string{"word", "path"},
-		SourceOptions: map[string]cmp.SourceOption{"_": {MinAutoCompleteLength: cmp.Ptr(0)}},
+		SourceOptions: map[string]cmp.SourceOption{"_": {MinAutoCompleteLength: new(0)}},
 	})
 	h2 := uiHost()
 	complete(t, b2, h2, ctxMap(1, "wor", ""))
@@ -310,7 +310,7 @@ func TestUIChoice(t *testing.T) {
 func TestAutoCompleteOff(t *testing.T) {
 	b := cmp.New()
 	b.AddSource(fakeSource{name: "a", items: []string{"x"}})
-	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, AutoComplete: cmp.Ptr(false)})
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, AutoComplete: new(false)})
 	h := uiHost()
 	complete(t, b, h, ctxMap(1, "x", ""))
 	if len(h.Calls()) != 0 {
@@ -365,7 +365,7 @@ func TestMergeSemantics(t *testing.T) {
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"a"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"a": {Mark: "A", Matchers: []string{"matcher_head"}, MaxItems: cmp.Ptr(5)},
+			"a": {Mark: "A", Matchers: []string{"matcher_head"}, MaxItems: new(5)},
 		},
 	})
 	// A second patch keeps Mark and MaxItems, replaces Matchers, adds Sorters.

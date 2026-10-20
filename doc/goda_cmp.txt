@@ -32,7 +32,7 @@ editor type-checks and completes the configuration.
 ==============================================================================
 INSTALL                                                     *goda-cmp-install*
 
-Requirements: Go 1.24 or later; Vim 9.1 or later (|+job| |+channel|
+Requirements: Go 1.26 or later; Vim 9.1 or later (|+job| |+channel|
 |+timers|) or Neovim; goda.vim; pum.vim if you want the pum popup.
 
 1. Install goda.vim and goda-cmp.vim with your plugin manager.
@@ -170,7 +170,9 @@ Settings:
 				|goda-cmp-partial| source answers (default 50)
 	SourceTimeout		bound for every source and filter in ms
 
-Where zero is a real value the field is a pointer: `cmp.Ptr(0)`.
+Where zero is a real value the field is a pointer, so that "not set" (nil)
+differs from 0 or false: write `new(0)` (Go 1.26).  A configuration written
+for an earlier version replaces `cmp.Ptr(` with `new(`.
 KeywordPattern is a regular expression in Go's RE2 syntax (no lookaround) for
 the text before the cursor; the match must end at the cursor.
 ForceCompletionPattern is one too, matched the same way: when it matches,
@@ -379,6 +381,11 @@ FAQ                                                             *goda-cmp-faq*
 
 Q: Nothing is offered.
 A: Check `:echo goda#plugins()` (it should list "cmp") and `:echo goda#log()`.
+
+Q: The build says "go.mod requires go >= 1.26" (or similar).
+A: Your go command is older and does not download Go 1.26 by itself, usually
+   because $GOTOOLCHAIN is "local" (some distributions set that).  Install
+   Go 1.26 from https://go.dev/dl/, or set $GOTOOLCHAIN to "auto".
 
 Q: The handshake or "protocol" error when starting.
 A: The binary was built with a different version of the goda.vim module than

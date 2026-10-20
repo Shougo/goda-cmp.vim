@@ -539,11 +539,9 @@ func (s *Source) Close(ctx context.Context) error {
 	s.mu.Unlock()
 	var wg sync.WaitGroup
 	for _, cl := range cls {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			cl.shutdown(ctx)
-		}()
+		})
 	}
 	wg.Wait()
 	return nil

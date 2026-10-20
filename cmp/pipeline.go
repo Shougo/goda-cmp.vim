@@ -55,11 +55,9 @@ func (e *engine) run(ctx context.Context, h sdk.Host, c *Context, cfg Config, sh
 
 	var wg sync.WaitGroup
 	for i := range cfg.Sources {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			r.gatherOne(ctx, i)
-		}()
+		})
 	}
 	allDone := make(chan struct{})
 	go func() { wg.Wait(); close(allDone) }()

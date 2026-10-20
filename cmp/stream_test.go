@@ -79,7 +79,7 @@ func TestStreamPartialResults(t *testing.T) {
 		{150 * time.Millisecond, []string{"fa", "fb"}}, // replaces, not appends
 	}})
 	b.AddSource(fakeSource{name: "plain", items: []string{"fc"}})
-	b.PatchGlobal(cmp.Config{Sources: []string{"lsp", "plain"}, PartialInterval: cmp.Ptr(10)})
+	b.PatchGlobal(cmp.Config{Sources: []string{"lsp", "plain"}, PartialInterval: new(10)})
 
 	h := uiHost()
 	complete(t, b, h, ctxMap(1, "f", ""))
@@ -116,7 +116,7 @@ func TestStreamKeepsEmittedItemsOnError(t *testing.T) {
 func TestStreamKeepsEmittedItemsOnTimeout(t *testing.T) {
 	b := cmp.New()
 	b.AddSource(streamSource{name: "lsp", steps: []step{{0, []string{"fa"}}, {5 * time.Second, []string{"fa", "fz"}}}})
-	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}, SourceTimeout: cmp.Ptr(100)})
+	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}, SourceTimeout: new(100)})
 	h := uiHost()
 	start := time.Now()
 	complete(t, b, h, ctxMap(1, "f", ""))
@@ -143,18 +143,16 @@ func TestStreamSupersededRequestStops(t *testing.T) {
 	b := cmp.New()
 	var stopped atomic.Bool
 	b.AddSource(stopSource{streamSource{name: "lsp", steps: []step{{0, []string{"fa"}}, {5 * time.Second, []string{"fb"}}}}, &stopped})
-	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}, PartialInterval: cmp.Ptr(10)})
+	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}, PartialInterval: new(10)})
 	p, err := b.Plugin()
 	if err != nil {
 		t.Fatal(err)
 	}
 	h := uiHost()
 	var wg sync.WaitGroup
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
+	wg.Go(func() {
 		p.Handlers()["complete"](context.Background(), h, []any{ctxMap(1, "f", "")})
-	}()
+	})
 	time.Sleep(200 * time.Millisecond)
 	p.Handlers()["complete"](context.Background(), h, []any{ctxMap(2, "f", "")}) // takes seq 2 and ends at its timeout... cancel via hide
 	wg.Wait()
@@ -238,11 +236,9 @@ func TestInitDoneResolve(t *testing.T) {
 	h := uiHost()
 	var wg sync.WaitGroup
 	for i := range 3 { // Init runs once even when requests overlap
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		wg.Go(func() {
 			p.Handlers()["complete"](context.Background(), h, []any{ctxMap(int64(10+i), "p", "go")})
-		}()
+		})
 	}
 	wg.Wait()
 	p.Handlers()["complete"](context.Background(), h, []any{ctxMap(20, "p", "go")})

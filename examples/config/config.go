@@ -17,16 +17,16 @@ func configure(b *cmp.Builder) {
 			},
 			"around": {Mark: "A"},
 		},
-		AutoCompleteDelay: cmp.Ptr(10),
+		AutoCompleteDelay: new(10),
 	})
 
 	// Per filetype, laid over the global settings.
 	b.PatchFiletype("markdown", cmp.Config{
 		SourceOptions: map[string]cmp.SourceOption{
-			"around": {MinAutoCompleteLength: cmp.Ptr(3)},
+			"around": {MinAutoCompleteLength: new(3)},
 		},
 	})
 	b.PatchFiletypes([]string{"gitcommit", "text"}, cmp.Config{
-		AutoCompleteDelay: cmp.Ptr(100),
+		AutoCompleteDelay: new(100),
 	})
 }

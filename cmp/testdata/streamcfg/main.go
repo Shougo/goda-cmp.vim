@@ -51,8 +51,8 @@ func main() {
 		UI:                "native",
 		Sources:           []string{"fakelsp"},
 		SourceOptions:     map[string]cmp.SourceOption{"_": {Matchers: []string{"matcher_head"}}},
-		AutoCompleteDelay: cmp.Ptr(10),
-		PartialInterval:   cmp.Ptr(20),
+		AutoCompleteDelay: new(10),
+		PartialInterval:   new(20),
 	})
 	b.Main()
 }

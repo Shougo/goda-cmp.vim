@@ -32,8 +32,8 @@ func main() {
 			// in sortText. Right after "." there is no word yet: force.
 			"gopls": {Mark: "LSP", ForceCompletionPattern: `\.\w*`, Sorters: []string{"sorter_text"}},
 		},
-		AutoCompleteDelay: cmp.Ptr(10),
-		SourceTimeout:     cmp.Ptr(5000),
+		AutoCompleteDelay: new(10),
+		SourceTimeout:     new(5000),
 	})
 	b.Main()
 }

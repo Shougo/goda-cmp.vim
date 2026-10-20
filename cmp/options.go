@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"regexp"
 	"strings"
 	"time"
@@ -12,15 +13,12 @@ import (
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-// Ptr returns a pointer to v. Config uses pointers where the zero value is a
-// meaningful setting: cmp.Ptr(0).
-func Ptr[T any](v T) *T { return &v }
-
 // SourceOption configures one source. The key "_" in Config.SourceOptions
 // holds the defaults every source inherits.
 //
 // A nil field means "not set"; a non-nil (even empty) slice replaces the
-// inherited one.
+// inherited one. Fields whose zero value is a real setting are pointers:
+// write new(0).
 type SourceOption struct {
 	// Mark is shown in the menu column of items that have none.
 	Mark string `json:"mark"`
@@ -104,14 +102,14 @@ func defaultConfig() Config {
 		UI: "native",
 		SourceOptions: map[string]SourceOption{
 			"_": {
-				MinAutoCompleteLength: Ptr(1),
-				MaxItems:              Ptr(100),
+				MinAutoCompleteLength: new(1),
+				MaxItems:              new(100),
 			},
 		},
-		AutoCompleteDelay: Ptr(0),
-		PartialInterval:   Ptr(50),
-		AutoComplete:      Ptr(true),
-		SourceTimeout:     Ptr(2000),
+		AutoCompleteDelay: new(0),
+		PartialInterval:   new(50),
+		AutoComplete:      new(true),
+		SourceTimeout:     new(2000),
 	}
 }
 
@@ -146,9 +144,7 @@ func merge(base, p Config) Config {
 		out.DynamicUI = p.DynamicUI
 	}
 	out.SourceOptions = make(map[string]SourceOption, len(base.SourceOptions)+len(p.SourceOptions))
-	for k, v := range base.SourceOptions {
-		out.SourceOptions[k] = v
-	}
+	maps.Copy(out.SourceOptions, base.SourceOptions)
 	for k, v := range p.SourceOptions {
 		out.SourceOptions[k] = mergeOption(out.SourceOptions[k], v)
 	}
