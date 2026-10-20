@@ -11,10 +11,10 @@ import (
 
 type filter struct{}
 
-// New returns the filter, named "sorter_length".
+// New returns the filter, named "sorterlength".
 func New() cmp.Filter { return filter{} }
 
-func (filter) Name() string { return "sorter_length" }
+func (filter) Name() string { return "sorterlength" }
 
 func (filter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
 	out := append([]cmp.Item(nil), in.Items...)

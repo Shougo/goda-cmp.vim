@@ -50,7 +50,7 @@ func main() {
 	b.PatchGlobal(cmp.Config{
 		UI:                "native",
 		Sources:           []string{"fakelsp"},
-		SourceOptions:     map[string]cmp.SourceOption{"_": {Matchers: []string{"matcher_head"}}},
+		SourceOptions:     map[string]cmp.SourceOption{"_": {Matchers: []string{"matcherhead"}}},
 		AutoCompleteDelay: new(10),
 		PartialInterval:   new(20),
 	})

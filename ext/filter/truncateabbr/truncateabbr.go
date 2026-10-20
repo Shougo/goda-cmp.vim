@@ -16,7 +16,7 @@ type Params struct {
 
 type filter struct{ max int }
 
-// New returns the filter, named "converter_truncate_abbr".
+// New returns the filter, named "truncateabbr".
 func New(p Params) cmp.Filter {
 	if p.MaxWidth <= 1 {
 		p.MaxWidth = 40
@@ -24,7 +24,7 @@ func New(p Params) cmp.Filter {
 	return filter{p.MaxWidth}
 }
 
-func (filter) Name() string { return "converter_truncate_abbr" }
+func (filter) Name() string { return "truncateabbr" }
 
 func (f filter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
 	out := append([]cmp.Item(nil), in.Items...)

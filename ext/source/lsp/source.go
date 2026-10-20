@@ -16,7 +16,7 @@
 // and give it these options: forceCompletionPattern for the places where
 // the server completes without a word ("\\." for members), no matchers (the
 // server filters itself) and a sorter that honours the server's order
-// (sorter_text).
+// (sortertext).
 //
 // Documents are synchronized in full: the whole buffer is sent when its
 // changedtick moved. Entering a buffer of the source's filetypes starts its

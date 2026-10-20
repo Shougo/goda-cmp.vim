@@ -145,7 +145,7 @@ The configuration is Go code; see `examples/config`.  Its shape mirrors
 	    UI:      "native",
 	    Sources: []string{"around"},
 	    SourceOptions: map[string]cmp.SourceOption{
-	        "_":      {Matchers: []string{"matcher_head"}},
+	        "_":      {Matchers: []string{"matcherhead"}},
 	        "around": {Mark: "A"},
 	    },
 	})
@@ -279,8 +279,11 @@ expressions made of those calls, lists, strings and numbers.
 behave like Vim's, for sources that read or change buffers.
 
 Extensions of this project are named `goda-cmp-source-{name}` and
-`goda-cmp-filter-{name}`, with the package `{name}` and the constructor
-`New(opts ...Option)`.
+`goda-cmp-filter-{name}`, with the package `{name}`, registered under the
+same name (`matcherhead.New()` is the filter "matcherhead"), and the
+constructor `New(Params)` (or `New()` when there is nothing to set).  The
+name says nothing about the kind: a filter is a matcher, a sorter or a
+converter by the list it is put in.
 
 ==============================================================================
 PARTIAL RESULTS                                             *goda-cmp-partial*
@@ -334,7 +337,7 @@ server, each under its own name: >go
 	            Mark:                   "LSP",
 	            ForceCompletionPattern: `\.\w*`,
 	            Matchers:               []string{},
-	            Sorters:                []string{"sorter_text"},
+	            Sorters:                []string{"sortertext"},
 	        },
 	    },
 	})
@@ -346,7 +349,7 @@ The source options matter:
 				for minAutoCompleteLength characters.
 	matchers		Most servers filter (fuzzily) themselves; an
 				empty list keeps their answer as it is.
-	sorters			sorter_text keeps the server's order.
+	sorters			sortertext keeps the server's order.
 
 	ConfirmBehavior		(a Params field) what an accepted item does to
 				the rest of the word after the cursor, when

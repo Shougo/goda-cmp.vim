@@ -19,10 +19,10 @@ type Params struct {
 
 type filter struct{ p Params }
 
-// New returns the filter, named "matcher_head".
+// New returns the filter, named "matcherhead".
 func New(p Params) cmp.Filter { return filter{p} }
 
-func (filter) Name() string { return "matcher_head" }
+func (filter) Name() string { return "matcherhead" }
 
 func (f filter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
 	typed := in.Complete

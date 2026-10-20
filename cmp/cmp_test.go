@@ -104,7 +104,7 @@ func TestAroundPipeline(t *testing.T) {
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"around"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"_": {Matchers: []string{"matcher_head"}, Sorters: []string{"sorter_length"}},
+			"_": {Matchers: []string{"matcherhead"}, Sorters: []string{"sorterlength"}},
 		},
 	})
 	h := uiHost("func fooBarBaz() {", "\tfoo := fooBar + other", "\tfo")
@@ -365,12 +365,12 @@ func TestMergeSemantics(t *testing.T) {
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"a"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"a": {Mark: "A", Matchers: []string{"matcher_head"}, MaxItems: new(5)},
+			"a": {Mark: "A", Matchers: []string{"matcherhead"}, MaxItems: new(5)},
 		},
 	})
 	// A second patch keeps Mark and MaxItems, replaces Matchers, adds Sorters.
 	b.PatchGlobal(cmp.Config{SourceOptions: map[string]cmp.SourceOption{
-		"a": {Matchers: []string{}, Sorters: []string{"sorter_length"}},
+		"a": {Matchers: []string{}, Sorters: []string{"sorterlength"}},
 	}})
 	p, err := b.Plugin()
 	if err != nil {

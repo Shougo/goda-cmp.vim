@@ -11,9 +11,9 @@ func configure(b *cmp.Builder) {
 		Sources: []string{"around"},
 		SourceOptions: map[string]cmp.SourceOption{
 			"_": {
-				Matchers:   []string{"matcher_head"},
-				Sorters:    []string{"sorter_length"},
-				Converters: []string{"converter_truncate_abbr"},
+				Matchers:   []string{"matcherhead"},
+				Sorters:    []string{"sorterlength"},
+				Converters: []string{"truncateabbr"},
 			},
 			"around": {Mark: "A"},
 		},

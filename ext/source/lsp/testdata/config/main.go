@@ -30,7 +30,7 @@ func main() {
 		SourceOptions: map[string]cmp.SourceOption{
 			// gopls filters by itself (fuzzy), so no matcher; its order is
 			// in sortText. Right after "." there is no word yet: force.
-			"gopls": {Mark: "LSP", ForceCompletionPattern: `\.\w*`, Sorters: []string{"sorter_text"}},
+			"gopls": {Mark: "LSP", ForceCompletionPattern: `\.\w*`, Sorters: []string{"sortertext"}},
 		},
 		AutoCompleteDelay: new(10),
 		SourceTimeout:     new(5000),
