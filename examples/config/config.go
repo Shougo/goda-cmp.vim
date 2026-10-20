@@ -13,7 +13,7 @@ func configure(b *cmp.Builder) {
 			"_": {
 				Matchers:   []string{"matcherhead"},
 				Sorters:    []string{"sorterlength"},
-				Converters: []string{"truncateabbr"},
+				Converters: []string{"convertertruncateabbr"},
 			},
 			"around": {Mark: "A"},
 		},

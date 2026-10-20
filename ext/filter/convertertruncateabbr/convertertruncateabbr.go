@@ -1,6 +1,6 @@
-// Package truncateabbr is a converter that shortens long labels so the popup
-// stays narrow.
-package truncateabbr
+// Package convertertruncateabbr is a converter that shortens long labels so
+// the popup stays narrow.
+package convertertruncateabbr
 
 import (
 	"context"
@@ -16,7 +16,7 @@ type Params struct {
 
 type filter struct{ max int }
 
-// New returns the filter, named "truncateabbr".
+// New returns the filter, named "convertertruncateabbr".
 func New(p Params) cmp.Filter {
 	if p.MaxWidth <= 1 {
 		p.MaxWidth = 40
@@ -24,7 +24,7 @@ func New(p Params) cmp.Filter {
 	return filter{p.MaxWidth}
 }
 
-func (filter) Name() string { return "truncateabbr" }
+func (filter) Name() string { return "convertertruncateabbr" }
 
 func (f filter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
 	out := append([]cmp.Item(nil), in.Items...)

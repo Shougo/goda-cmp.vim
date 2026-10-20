@@ -10,9 +10,9 @@ import (
 
 	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp.vim/cmp/cmptest"
+	"github.com/Shougo/goda-cmp.vim/ext/filter/convertertruncateabbr"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/sorterlength"
-	"github.com/Shougo/goda-cmp.vim/ext/filter/truncateabbr"
 	"github.com/Shougo/goda-cmp.vim/ext/source/around"
 	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
@@ -422,7 +422,7 @@ func TestMatcherHeadCase(t *testing.T) {
 }
 
 func TestTruncateAbbr(t *testing.T) {
-	f := truncateabbr.New(truncateabbr.Params{MaxWidth: 5})
+	f := convertertruncateabbr.New(convertertruncateabbr.Params{MaxWidth: 5})
 	in := []cmp.Item{{Word: "日本語日本語日本語"}, {Word: "ab"}}
 	out, _ := f.Filter(context.Background(), cmp.FilterInput{Items: in})
 	if out[0].Abbr != "日本語日…" || out[1].Abbr != "" {
