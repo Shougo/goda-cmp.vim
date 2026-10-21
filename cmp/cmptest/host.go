@@ -10,10 +10,12 @@ import (
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-// Call is one recorded Host.Call.
+// Call is one recorded Host.Call or Host.Notify.
 type Call struct {
 	Fn   string
 	Args []any
+	// Notify is set for a Host.Notify.
+	Notify bool
 }
 
 // Host is an sdk.Host whose Vim functions are Go functions. Eval understands
@@ -31,13 +33,26 @@ func (h *Host) Meta() sdk.Meta { return sdk.Meta{Host: sdk.HostVim} }
 
 func (h *Host) Call(_ context.Context, fn string, args ...any) (any, error) {
 	h.mu.Lock()
-	h.calls = append(h.calls, Call{fn, args})
+	h.calls = append(h.calls, Call{Fn: fn, Args: args})
 	f := h.Funcs[fn]
 	h.mu.Unlock()
 	if f == nil {
 		return nil, fmt.Errorf("E117: Unknown function: %s", fn)
 	}
 	return f(args...)
+}
+
+// Notify runs the fake like Call does and drops its result. As in the
+// editor, an error of the function is not returned.
+func (h *Host) Notify(_ context.Context, fn string, args ...any) error {
+	h.mu.Lock()
+	h.calls = append(h.calls, Call{Fn: fn, Args: args, Notify: true})
+	f := h.Funcs[fn]
+	h.mu.Unlock()
+	if f != nil {
+		_, _ = f(args...)
+	}
+	return nil
 }
 
 func (h *Host) Cmd(context.Context, string) error { return fmt.Errorf("cmptest: Cmd") }
@@ -81,3 +96,6 @@ func toInt(v any) int {
 	}
 	return 0
 }
+
+// Host must stay an sdk.Host when goda.vim changes.
+var _ sdk.Host = (*Host)(nil)

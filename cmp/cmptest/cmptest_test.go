@@ -71,3 +71,22 @@ func TestEditor(t *testing.T) {
 		t.Errorf("buftype = %v", v)
 	}
 }
+
+func TestNotify(t *testing.T) {
+	e := cmptest.NewEditor("f.txt", "a")
+	h := e.Host()
+	ctx := context.Background()
+	if err := h.Notify(ctx, "setbufline", 1, 1, "b"); err != nil {
+		t.Fatal(err)
+	}
+	if err := h.Notify(ctx, "no_such_function"); err != nil {
+		t.Errorf("an error of the function came back: %v", err)
+	}
+	if got := e.Lines(1); !reflect.DeepEqual(got, []string{"b"}) {
+		t.Errorf("lines = %q", got)
+	}
+	calls := h.Calls()
+	if len(calls) != 2 || !calls[0].Notify || calls[0].Fn != "setbufline" {
+		t.Errorf("calls = %+v", calls)
+	}
+}
