@@ -8,27 +8,27 @@ filetype plugin on
 
 " Ctrl-] in insert mode records what the popup shows.
 function! DumpPopup() abort
-  let l:ui = empty($PUM_RTP) ? 'native' : 'pum'
-  if l:ui ==# 'pum'
-    let l:visible = pum#visible()
-    let l:words = l:visible ? map(copy(pum#_get().items), 'v:val.word') : []
+  let ui = empty($PUM_RTP) ? 'native' : 'pum'
+  if ui ==# 'pum'
+    let visible = pum#visible()
+    let words = visible ? map(copy(pum#_get().items), 'v:val.word') : []
   else
-    let l:visible = pumvisible()
+    let visible = pumvisible()
     " What the user sees: complete_info().items comes back in reverse order
     " (checked in Vim 9.1), so read the popup rows from the screen instead.
     " pum_getpos() says where the popup is (it may open above the cursor)
     " and how many rows it shows (fewer than the items when they do not fit).
-    let l:words = []
-    if l:visible
-      let l:pos = pum_getpos()
-      for l:i in range(l:pos.height)
-        let l:row = join(map(range(l:pos.col + 1, l:pos.col + l:pos.width),
-              \ {_, c -> screenstring(l:pos.row + 1 + l:i, c)}), '')
-        call add(l:words, split(trim(l:row))[0])
+    let words = []
+    if visible
+      let pos = pum_getpos()
+      for i in range(pos.height)
+        let row = join(map(range(pos.col + 1, pos.col + pos.width),
+              \ {_, c -> screenstring(pos.row + 1 + i, c)}), '')
+        call add(words, split(trim(row))[0])
       endfor
     endif
   endif
-  call writefile([json_encode({'visible': l:visible ? v:true : v:false, 'words': l:words, 'line': getline('.')})], $GODA_OUT, 'a')
+  call writefile([json_encode({'visible': visible ? v:true : v:false, 'words': words, 'line': getline('.')})], $GODA_OUT, 'a')
   return ''
 endfunction
 inoremap <C-]> <Cmd>call DumpPopup()<CR>
@@ -55,11 +55,11 @@ endfunction
 function! PatchBad() abort
   try
     call goda_cmp#patch_buffer({'sources': ['no_such_source']})
-    let l:err = 'no error'
+    let err = 'no error'
   catch
-    let l:err = v:exception
+    let err = v:exception
   endtry
-  call writefile([json_encode({'error': l:err, 'buffer': goda_cmp#get_buffer()})], $GODA_OUT, 'a')
+  call writefile([json_encode({'error': err, 'buffer': goda_cmp#get_buffer()})], $GODA_OUT, 'a')
   return ''
 endfunction
 " $GODA_NO_PATCH_MAPS leaves the keys alone (Ctrl-Y accepts a candidate).

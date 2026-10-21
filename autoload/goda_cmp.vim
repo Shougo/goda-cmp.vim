@@ -22,15 +22,15 @@ let s:filetype_patch = {}
 " directory (which belongs in your dotfiles) but into a cache directory.
 function! s:cache_dir() abort
   if has('nvim')
-    let l:base = stdpath('cache')
+    let base = stdpath('cache')
   elseif !empty($XDG_CACHE_HOME)
-    let l:base = $XDG_CACHE_HOME . '/vim'
+    let base = $XDG_CACHE_HOME . '/vim'
   elseif has('win32') && !empty($LOCALAPPDATA)
-    let l:base = $LOCALAPPDATA . '/vim'
+    let base = $LOCALAPPDATA . '/vim'
   else
-    let l:base = expand('~/.cache/vim')
+    let base = expand('~/.cache/vim')
   endif
-  return l:base . '/goda-cmp'
+  return base . '/goda-cmp'
 endfunction
 
 function! s:default_bin() abort
@@ -54,26 +54,26 @@ endfunction
 " an extension changed (see the README for an autocmd). When the build fails,
 " the previous binary keeps running.
 function! goda_cmp#build() abort
-  let l:dir = s:config_dir()
-  if !isdirectory(l:dir)
-    throw 'goda-cmp: no config directory: ' . l:dir
+  let dir = s:config_dir()
+  if !isdirectory(dir)
+    throw 'goda-cmp: no config directory: ' . dir
   endif
-  let l:bin = s:default_bin()
-  call mkdir(fnamemodify(l:bin, ':h'), 'p')
+  let bin = s:default_bin()
+  call mkdir(fnamemodify(bin, ':h'), 'p')
 
-  let l:was_enabled = exists('s:enabled')
+  let was_enabled = exists('s:enabled')
   call goda_cmp#disable()
   " One command, no cd and no &&: the latter differs between shells (cmd.exe,
   " PowerShell, sh). "go -C" runs go in that directory (Go 1.20 or later).
-  let l:out = system('go -C ' . shellescape(l:dir) . ' build -o ' . shellescape(l:bin) . ' .')
-  let l:failed = v:shell_error
-  if l:was_enabled
+  let out = system('go -C ' . shellescape(dir) . ' build -o ' . shellescape(bin) . ' .')
+  let failed = v:shell_error
+  if was_enabled
     call goda_cmp#enable()
   endif
-  if l:failed
-    throw 'goda-cmp: go build failed:' . "\n" . l:out
+  if failed
+    throw 'goda-cmp: go build failed:' . "\n" . out
   endif
-  echomsg 'goda-cmp: built ' . l:bin
+  echomsg 'goda-cmp: built ' . bin
 endfunction
 
 " Start the plugin binary and begin completing in insert mode.
@@ -95,14 +95,14 @@ function! goda_cmp#enable() abort
   endif
   " A binary built from an invalid configuration starts anyway and says why.
   try
-    let l:status = goda#request('cmp', 'status')
+    let status = goda#request('cmp', 'status')
   catch
-    let l:status = ''  " a binary from before cmp.status
+    let status = ''  " a binary from before cmp.status
   endtry
-  if type(l:status) == v:t_string && l:status !=# ''
+  if type(status) == v:t_string && status !=# ''
     call goda#stop('cmp')
     throw 'goda-cmp: fix the configuration in ' . s:config_dir()
-          \ . ' and run goda_cmp#build(): ' . l:status
+          \ . ' and run goda_cmp#build(): ' . status
   endif
   let s:enabled = 1
   augroup goda_cmp
@@ -143,21 +143,21 @@ function! s:setup_events() abort
   " A new binary expects the numbering to start at 1.
   let s:event_seq = 0
   try
-    let l:table = goda#request('cmp', 'events')
+    let table = goda#request('cmp', 'events')
   catch
     " an older binary without events
     return
   endtry
   augroup goda_cmp_events
-    for l:e in l:table
-      if !exists('##' . l:e.event)
+    for e in table
+      if !exists('##' . e.event)
         echohl WarningMsg
-        echomsg 'goda-cmp: unknown autocmd event: ' . l:e.event
+        echomsg 'goda-cmp: unknown autocmd event: ' . e.event
         echohl None
         continue
       endif
-      let s:event_fts[l:e.event] = l:e.filetypes
-      execute 'autocmd' l:e.event '* call s:on_event(' string(l:e.event) ', str2nr(expand("<abuf>")))'
+      let s:event_fts[e.event] = e.filetypes
+      execute 'autocmd' e.event '* call s:on_event(' string(e.event) ', str2nr(expand("<abuf>")))'
     endfor
   augroup END
   " The current buffer was entered before the plugin started.
@@ -167,24 +167,24 @@ function! s:setup_events() abort
 endfunction
 
 function! s:on_event(event, bufnr) abort
-  let l:ft = getbufvar(a:bufnr, '&filetype')
-  let l:fts = get(s:event_fts, a:event, [])
-  if !empty(l:fts) && empty(filter(split(l:ft, '\.'), {_, v -> index(l:fts, v) >= 0}))
+  let ft = getbufvar(a:bufnr, '&filetype')
+  let fts = get(s:event_fts, a:event, [])
+  if !empty(fts) && empty(filter(split(ft, '\.'), {_, v -> index(fts, v) >= 0}))
     return
   endif
   if !goda#is_running('cmp')
     return
   endif
-  let l:name = bufname(a:bufnr)
+  let name = bufname(a:bufnr)
   let s:event_seq += 1
   call goda#notify('cmp', 'event', {
         \ 'seq': s:event_seq,
         \ 'name': a:event,
         \ 'bufnr': a:bufnr,
         \ 'tick': getbufvar(a:bufnr, 'changedtick'),
-        \ 'filetype': l:ft,
+        \ 'filetype': ft,
         \ 'buftype': getbufvar(a:bufnr, '&buftype'),
-        \ 'path': l:name ==# '' ? '' : fnamemodify(l:name, ':p'),
+        \ 'path': name ==# '' ? '' : fnamemodify(name, ':p'),
         \ })
 endfunction
 
@@ -195,19 +195,19 @@ endfunction
 " is running, and an invalid one throws.
 
 function! s:merge(base, patch) abort
-  let l:r = deepcopy(a:base)
-  for [l:key, l:val] in items(a:patch)
-    if l:key ==# 'sourceOptions' && type(l:val) == v:t_dict
-      let l:opts = get(l:r, 'sourceOptions', {})
-      for [l:src, l:opt] in items(l:val)
-        let l:opts[l:src] = extend(get(l:opts, l:src, {}), deepcopy(l:opt))
+  let r = deepcopy(a:base)
+  for [key, val] in items(a:patch)
+    if key ==# 'sourceOptions' && type(val) == v:t_dict
+      let opts = get(r, 'sourceOptions', {})
+      for [src, opt] in items(val)
+        let opts[src] = extend(get(opts, src, {}), deepcopy(opt))
       endfor
-      let l:r.sourceOptions = l:opts
+      let r.sourceOptions = opts
     else
-      let l:r[l:key] = deepcopy(l:val)
+      let r[key] = deepcopy(val)
     endif
   endfor
-  return l:r
+  return r
 endfunction
 
 function! s:check(config) abort
@@ -260,32 +260,32 @@ endfunction
 
 " What the plugin needs to resolve the settings of this buffer.
 function! s:patches() abort
-  let l:fts = {}
-  for l:part in split(&filetype, '\.')
-    if has_key(s:filetype_patch, l:part)
-      let l:fts[l:part] = s:filetype_patch[l:part]
+  let fts = {}
+  for part in split(&filetype, '\.')
+    if has_key(s:filetype_patch, part)
+      let fts[part] = s:filetype_patch[part]
     endif
   endfor
-  return {'global': s:global_patch, 'filetype': l:fts, 'buffer': get(b:, 'goda_cmp_patch', {})}
+  return {'global': s:global_patch, 'filetype': fts, 'buffer': get(b:, 'goda_cmp_patch', {})}
 endfunction
 
 " ---------------------------------------------------------------------------
 " Requests
 
 function! s:options() abort
-  let l:patches = s:patches()
-  let l:key = &filetype . "\n" . json_encode(l:patches)
-  if !has_key(s:opts, l:key)
+  let patches = s:patches()
+  let key = &filetype . "\n" . json_encode(patches)
+  if !has_key(s:opts, key)
     if len(s:opts) > 50
       let s:opts = {}
     endif
     try
-      let s:opts[l:key] = goda#request('cmp', 'options', &filetype, l:patches)
+      let s:opts[key] = goda#request('cmp', 'options', &filetype, patches)
     catch
       return {'autoComplete': 0, 'delay': 0, 'ui': 'native'}
     endtry
   endif
-  return s:opts[l:key]
+  return s:opts[key]
 endfunction
 
 function! s:context(manual) abort
@@ -316,28 +316,28 @@ function! s:on_change(event) abort
   if !goda#is_running('cmp')
     return
   endif
-  let l:opts = s:options()
+  let opts = s:options()
   " Text that the popup itself inserted (selecting an item) must not start a
   " new completion.
-  if get(l:opts, 'ui', '') ==# 'pum' && pum#skip_complete()
+  if get(opts, 'ui', '') ==# 'pum' && pum#skip_complete()
     return
   endif
   if a:event ==# 'TextChangedP' && get(complete_info(['selected']), 'selected', -1) >= 0
     return
   endif
-  if !get(l:opts, 'autoComplete', 1)
+  if !get(opts, 'autoComplete', 1)
     return
   endif
-  let l:key = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
-  if l:key ==# s:last
+  let key = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  if key ==# s:last
     return
   endif
-  let s:last = l:key
+  let s:last = key
 
   if s:timer != -1
     call timer_stop(s:timer)
   endif
-  let s:timer = timer_start(get(l:opts, 'delay', 0), {-> s:send(0)})
+  let s:timer = timer_start(get(opts, 'delay', 0), {-> s:send(0)})
 endfunction
 
 " Complete now, whatever the typed length. Meant for a mapping:
@@ -381,9 +381,9 @@ function! s:set_completeopt() abort
   if s:saved_completeopt is v:null
     let s:saved_completeopt = &completeopt
   endif
-  let l:keep = filter(split(s:saved_completeopt, ','),
+  let keep = filter(split(s:saved_completeopt, ','),
         \ {_, v -> index(['longest', 'noinsert', 'noselect', 'menuone'], v) < 0})
-  let &completeopt = join(l:keep + ['menuone', 'noinsert', 'noselect'], ',')
+  let &completeopt = join(keep + ['menuone', 'noinsert', 'noselect'], ',')
 endfunction
 
 function! s:restore_completeopt() abort
@@ -399,14 +399,14 @@ function! s:ref(item) abort
   if type(a:item) != v:t_dict
     return ''
   endif
-  let l:ref = get(a:item, 'user_data', '')
-  return type(l:ref) == v:t_string ? l:ref : ''
+  let ref = get(a:item, 'user_data', '')
+  return type(ref) == v:t_string ? ref : ''
 endfunction
 
 function! s:on_done(item) abort
   let s:selected_ref = ''
-  let l:ref = s:ref(a:item)
-  if l:ref !=# ''
+  let ref = s:ref(a:item)
+  if ref !=# ''
     " Accepting inserted nothing new: the TextChangedI that may follow must
     " not start another completion for the word that was just completed.
     if s:timer != -1
@@ -415,8 +415,8 @@ function! s:on_done(item) abort
     endif
     let s:last = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
   endif
-  if l:ref !=# '' && goda#is_running('cmp') && get(v:event, 'reason', 'accept') !=# 'cancel'
-    call goda#notify('cmp', 'done', l:ref)
+  if ref !=# '' && goda#is_running('cmp') && get(v:event, 'reason', 'accept') !=# 'cancel'
+    call goda#notify('cmp', 'done', ref)
   endif
 endfunction
 
@@ -434,17 +434,17 @@ function! goda_cmp#_resolved(r) abort
   if a:r.ref !=# s:selected_ref
     return 0
   endif
-  let l:info = get(a:r.item, 'info', '')
-  if l:info ==# ''
+  let info = get(a:r.item, 'info', '')
+  if info ==# ''
     return 0
   endif
   if exists('*pum#update_current_item') && exists('*pum#visible') && pum#visible()
-    call pum#update_current_item({'info': l:info})
+    call pum#update_current_item({'info': info})
   elseif exists('*popup_findinfo')
     " only possible when 'completeopt' has "popup" and the item had an info
-    let l:id = popup_findinfo()
-    if l:id > 0
-      call popup_settext(l:id, split(l:info, "\n"))
+    let id = popup_findinfo()
+    if id > 0
+      call popup_settext(id, split(info, "\n"))
     endif
   endif
   return 1
