@@ -384,3 +384,68 @@ qa!
 		t.Errorf("the binary was left running:\n%s", got)
 	}
 }
+
+// TestRealVimNoCmpPlugin: goda_cmp#enable() with a binary that has no "cmp"
+// plugin stops that binary only, not the binaries of other plugins.
+func TestRealVimNoCmpPlugin(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts Vim")
+	}
+	vimBin, err := exec.LookPath("vim")
+	if err != nil {
+		t.Skip("vim is not installed")
+	}
+	built, repo, godaRoot := buildConfig(t, "testdata/nocmp")
+	dir := t.TempDir()
+	// Two copies: "wrong" is what goda-cmp is pointed at, "bystander" is
+	// another plugin's binary that must keep running.
+	data, err := os.ReadFile(built)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrong, bystander := filepath.Join(dir, "wrong"), filepath.Join(dir, "bystander")
+	for _, p := range []string{wrong, bystander} {
+		if err := os.WriteFile(p, data, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	out := filepath.Join(dir, "out.txt")
+	script := filepath.Join(dir, "test.vim")
+	vimscript := `set nocompatible
+let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . ',' . &runtimepath
+let g:goda_cmp#binary = $GODA_CMP_BIN
+call goda#start($GODA_BYSTANDER)
+try
+  call goda_cmp#enable()
+  let s:r = ['no error']
+catch
+  let s:r = [v:exception]
+endtry
+call add(s:r, 'wrong=' . goda#is_running('wrong'))
+call add(s:r, 'bystander=' . goda#is_running('bystander'))
+call writefile(s:r, $GODA_OUT)
+call goda#stop()
+qa!
+`
+	if err := os.WriteFile(script, []byte(vimscript), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(vimBin, "-u", "NONE", "-i", "NONE", "-N", "-es", "-S", script)
+	cmd.Env = append(os.Environ(), "GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo,
+		"GODA_CMP_BIN="+wrong, "GODA_BYSTANDER="+bystander, "GODA_OUT="+out)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("vim: %v\n%s", err, b)
+	}
+	b, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(b)
+	t.Logf("%s", got)
+	if !strings.Contains(got, `does not contain the "cmp" plugin`) {
+		t.Errorf("enable() did not refuse the binary:\n%s", got)
+	}
+	if !strings.Contains(got, "wrong=0") || !strings.Contains(got, "bystander=1") {
+		t.Errorf("the wrong binary must stop and the other one keep running:\n%s", got)
+	}
+}

@@ -90,9 +90,13 @@ function! goda_cmp#enable() abort
     echohl None
     return
   endif
-  call goda#start(s:default_bin())
-  if !goda#is_running('cmp')
-    call goda#stop()
+  let plugins = goda#start(s:default_bin())
+  if index(plugins, 'cmp') < 0
+    " Stop only the binary just started (through one of its plugins), not
+    " the binaries of other plugins.
+    if !empty(plugins)
+      call goda#stop(plugins[0])
+    endif
     throw 'goda-cmp: ' . s:default_bin() . ' does not contain the "cmp" plugin'
   endif
   " A binary built from an invalid configuration starts anyway and says why.
