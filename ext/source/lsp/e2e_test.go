@@ -103,6 +103,13 @@ func TestRealGopls(t *testing.T) {
 			ds = append(ds, d)
 		}
 		t.Logf("records: %+v", ds)
+		// The popup shows the label and, from newer gopls, its
+		// labelDetails ("Println(a ...any)"): compare the names only.
+		for i := range ds {
+			for j, w := range ds[i].Words {
+				ds[i].Words[j], _, _ = strings.Cut(w, "(")
+			}
+		}
 		if len(ds) != 5 {
 			t.Fatalf("got %d records, want 5", len(ds))
 		}
