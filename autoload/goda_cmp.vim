@@ -9,6 +9,9 @@
 let s:seq = 0
 let s:timer = -1
 let s:last = []        " [bufnr, lnum, input] of the last request
+" [bufnr, input] when a candidate was just accepted: no new completion for the
+" same text, even when the line moved (an import added above it, say).
+let s:accepted = []
 let s:opts = {}        " answers of cmp.options, by filetype and patches
 
 " Settings made at run time. They live here, not in the plugin binary: they
@@ -329,6 +332,12 @@ function! s:on_change(event) abort
   if key ==# s:last
     return
   endif
+  if !empty(s:accepted)
+    if [key[0], key[2]] ==# s:accepted
+      return
+    endif
+    let s:accepted = []
+  endif
   let s:last = key
 
   if s:timer != -1
@@ -341,6 +350,7 @@ endfunction
 "   inoremap <C-n> <Cmd>call goda_cmp#complete()<CR>
 function! goda_cmp#complete() abort
   let s:last = []
+  let s:accepted = []
   call s:send(1, '')
   return ''
 endfunction
@@ -351,6 +361,7 @@ function! goda_cmp#hide() abort
     let s:timer = -1
   endif
   let s:last = []
+  let s:accepted = []
   if goda#is_running('cmp')
     try
       call goda#notify('cmp', 'hide', &filetype, s:patches())
@@ -394,6 +405,7 @@ function! goda_cmp#_done(item, reason) abort
     let s:timer = -1
   endif
   let s:last = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  let s:accepted = [s:last[0], s:last[2]]
   if a:reason !=# 'cancel' && goda#is_running('cmp')
     call goda#notify('cmp', 'done', ref)
   endif

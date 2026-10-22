@@ -110,7 +110,10 @@ func (b *Builder) checkEvents() []string {
 
 // table is what the Vim side needs to set up its autocmds: for each event,
 // the filetypes to send it for ([] for all).
-func (ev *events) table() []map[string]any {
+//
+// It is made of generic values only ([]any, map[string]any, []string): the
+// Neovim transport of goda.vim v0.2.0 and older encodes nothing else.
+func (ev *events) table() []any {
 	fts := map[string]map[string]bool{} // event -> filetypes; nil map = all
 	all := map[string]bool{}
 	for _, specs := range ev.specs {
@@ -133,7 +136,7 @@ func (ev *events) table() []map[string]any {
 		names = append(names, n)
 	}
 	sort.Strings(names)
-	out := make([]map[string]any, 0, len(names))
+	out := make([]any, 0, len(names))
 	for _, n := range names {
 		list := []string{}
 		if !all[n] {

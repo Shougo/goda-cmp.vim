@@ -1,10 +1,14 @@
 " vimrc of the real-Vim end-to-end test (cmp/e2e_test.go).
 set nocompatible noswapfile nobackup nowritebackup ttimeout ttimeoutlen=10
+" Neovim's defaults differ from Vim's: keep what is typed as it is typed.
+set noautoindent nosmarttab
 " $GODA_COMPLETEOPT lets a test run with other completeopt values.
 let &completeopt = empty($GODA_COMPLETEOPT) ? 'menuone,noinsert,noselect' : $GODA_COMPLETEOPT
 let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . (empty($PUM_RTP) ? '' : ',' . $PUM_RTP) . ',' . &runtimepath
 let g:goda_cmp#binary = $GODA_CMP_BIN
 filetype plugin on
+" Neovim turns indenting on by default (Vim does not).
+filetype indent off
 
 " Ctrl-] in insert mode records what the popup shows.
 function! DumpPopup() abort
@@ -20,7 +24,8 @@ function! DumpPopup() abort
     " and how many rows it shows (fewer than the items when they do not fit).
     let words = []
     if visible
-      let pos = pum_getpos()
+      " Neovim answers with Floats.
+      let pos = map(pum_getpos(), {_, v -> type(v) == v:t_float ? float2nr(v) : v})
       for i in range(pos.height)
         let row = join(map(range(pos.col + 1, pos.col + pos.width),
               \ {_, c -> screenstring(pos.row + 1 + i, c)}), '')

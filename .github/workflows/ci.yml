@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    name: go ${{ matrix.go }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The oldest Go the module supports, and the newest.
+        go: ['1.26', 'stable']
+    defaults:
+      run:
+        working-directory: goda-cmp.vim
+    steps:
+      # The end-to-end tests expect goda.vim next to goda-cmp.vim, and run
+      # with its latest version.
+      - uses: actions/checkout@v7
+        with:
+          path: goda-cmp.vim
+      - uses: actions/checkout@v7
+        with:
+          repository: Shougo/goda.vim
+          path: goda.vim
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: goda-cmp.vim/go.sum
+      # The end-to-end tests run in every editor they find.
+      - name: Install Vim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          version: stable
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+      # For ext/source/lsp. The latest gopls may need a newer Go than the
+      # matrix one; the go command fetches it (GOTOOLCHAIN=auto).
+      - name: Install gopls
+        run: go install golang.org/x/tools/gopls@latest
+      - run: vim --version | head -n 3 && nvim --version | head -n 1 && gopls version
+      - run: gofmt -l . | tee /dev/stderr | (! read)
+      - run: go vet ./...
+      - run: go test -race ./...

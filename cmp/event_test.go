@@ -65,9 +65,9 @@ func TestEvents(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []map[string]any{
-		{"event": "BufDelete", "filetypes": []string{}}, // "any" wants every filetype
-		{"event": "BufEnter", "filetypes": []string{"go"}},
+	want := []any{
+		map[string]any{"event": "BufDelete", "filetypes": []string{}}, // "any" wants every filetype
+		map[string]any{"event": "BufEnter", "filetypes": []string{"go"}},
 	}
 	if !reflect.DeepEqual(table, want) {
 		t.Errorf("events = %v, want %v", table, want)

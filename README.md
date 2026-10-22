@@ -66,14 +66,16 @@ editor type-checks and completes the configuration.
 ## Tests
 
 ```sh
-go test ./...                      # unit tests; also starts a real Vim if present
+go test ./...                      # unit tests; also real Vim and Neovim if present
 GODA_CMP_PUM=/path/to/pum.vim go test ./cmp   # also run the pum scenario
 ```
 
-The Vim test types into a real Vim in a pseudo terminal (Python 3 needed),
-using a binary built from `examples/config`. goda.vim is expected as a sibling
-directory (`../goda.vim`) while the modules are unpublished; the `replace`
-lines in `go.mod` and `examples/config/go.mod` are to be removed after that.
+The end-to-end tests type into a real Vim and a real Neovim, whichever are
+installed, in a pseudo terminal (Python 3 needed), using a binary built from
+`examples/config`; ext/source/lsp does the same with gopls if it is
+installed. CI (`.github/workflows/ci.yml`) installs all of them. They build
+against goda.vim as a sibling directory (`../goda.vim`), and are skipped
+without it.
 
 ## Not implemented yet
 
