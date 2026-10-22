@@ -26,10 +26,6 @@ jobs:
         with:
           repository: Shougo/goda.vim
           path: goda.vim
-      - uses: actions/setup-go@v7
-        with:
-          go-version: ${{ matrix.go }}
-          cache-dependency-path: goda-cmp.vim/go.sum
       # The end-to-end tests run in every editor they find.
       - name: Install Vim
         uses: rhysd/action-setup-vim@v1
@@ -40,11 +36,20 @@ jobs:
         with:
           neovim: true
           version: stable
-      # For ext/source/lsp. The latest gopls may need a newer Go than the
-      # matrix one; the go command fetches it (GOTOOLCHAIN=auto).
+      # After the editors: installing them may put a directory with the
+      # runner's own, older Go first in PATH.
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ matrix.go }}
+          cache-dependency-path: goda-cmp.vim/go.sum
+      # For ext/source/lsp.
       - name: Install gopls
         run: go install golang.org/x/tools/gopls@latest
-      - run: vim --version | head -n 3 && nvim --version | head -n 1 && gopls version
+        env:
+          # setup-go sets GOTOOLCHAIN=local, which would refuse the newer Go
+          # the latest gopls needs.
+          GOTOOLCHAIN: auto
+      - run: go version && vim --version | head -n 3 && nvim --version | head -n 1 && gopls version
       - run: gofmt -l . | tee /dev/stderr | (! read)
       - run: go vet ./...
       - run: go test -race ./...
