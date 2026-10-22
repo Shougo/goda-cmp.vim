@@ -6,35 +6,24 @@ import (
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-// NativeUI shows candidates with Vim's own popup menu (complete()). The
-// Vim-side helpers are in autoload/goda_cmp.vim.
-func NativeUI() UI {
-	return vimUI{name: "native", show: "goda_cmp#_native_show", hide: "goda_cmp#_native_hide"}
+// UIs are extensions like sources and filters (see ext/ui/native and
+// ext/ui/pum): the engine knows none of them and calls no Vim script of its
+// own to show candidates. A UI talks to the editor itself, through the Host
+// it is given, and its Vim script talks back to the engine through the
+// goda_cmp#_* receivers (see autoload/goda_cmp.vim).
+
+// Skipper is implemented by UIs that insert text themselves, typically when
+// the user moves through the list, and can tell such a change from typing.
+// SkipCompletion runs before every automatic request (not for
+// goda_cmp#complete()); true drops the request, so that the popup is not
+// rebuilt under the user.
+type Skipper interface {
+	SkipCompletion(ctx context.Context, h sdk.Host, c *Context) (bool, error)
 }
 
-// PumUI shows candidates with pum.vim, which must be installed. Its key
-// mappings and options are configured in Vim script as usual
-// (pum#set_option, pum#map#...).
-func PumUI() UI { return vimUI{name: "pum", show: "goda_cmp#_pum_show", hide: "goda_cmp#_pum_hide"} }
-
-// vimUI is a UI implemented by two Vim script functions.
-type vimUI struct{ name, show, hide string }
-
-func (u vimUI) Name() string { return u.name }
-
-func (u vimUI) Show(ctx context.Context, h sdk.Host, r ShowRequest) error {
-	_, err := h.Call(ctx, u.show, map[string]any{
-		"seq":   r.Context.Seq,
-		"tick":  r.Context.Tick,
-		"col":   r.Col,
-		"items": r.Items,
-		// false while sources are still answering (see StreamSource)
-		"final": r.Final,
-	})
-	return err
-}
-
-func (u vimUI) Hide(ctx context.Context, h sdk.Host) error {
-	_, err := h.Call(ctx, u.hide)
-	return err
+// InfoUpdater is implemented by UIs that can show what a source's Resolve
+// added to the selected item (its Info). The engine calls it on the UI that
+// showed the item; the item carries the Ref the UI gave it as user_data.
+type InfoUpdater interface {
+	UpdateInfo(ctx context.Context, h sdk.Host, it Item) error
 }

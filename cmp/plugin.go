@@ -44,6 +44,7 @@ type shown struct {
 	c       *Context
 	items   []Item
 	timeout time.Duration
+	ui      UI // the UI that showed the list
 }
 
 // How many shown lists are kept. Streaming makes several per request.
@@ -138,6 +139,22 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 	if !c.Manual && !deref(cfg.AutoComplete, true) {
 		return nil, nil
 	}
+	// A change the UI made itself (selecting an item inserts it) is not
+	// typing: the UI says so (Skipper), as in ddc.vim.
+	if !c.Manual {
+		if u, err := e.ui(cfg.UI); err == nil {
+			if sk, ok := u.(Skipper); ok {
+				sctx, cancel := context.WithTimeout(ctx, cfg.timeout())
+				skip, err := sdk.Guard(sctx, func() (bool, error) { return sk.SkipCompletion(sctx, h, &c) })
+				cancel()
+				if err != nil {
+					log.Printf("cmp: ui %s: skipCompletion: %v", u.Name(), err)
+				} else if skip {
+					return nil, nil
+				}
+			}
+		}
+	}
 
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -196,7 +213,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 			return u.Hide(ctx, h)
 		}
 		shownItems = len(items)
-		items = e.remember(&c, cfg.timeout(), items)
+		items = e.remember(&c, cfg.timeout(), u, items)
 		if err := u.Show(ctx, h, ShowRequest{Context: &c, Col: start + 1, Items: items, Final: final, Pending: pending}); err != nil {
 			log.Printf("cmp: ui %s: %v", u.Name(), err)
 			return err
@@ -214,7 +231,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 
 // remember keeps the list for done/resolve and returns a copy whose items
 // carry their reference.
-func (e *engine) remember(c *Context, timeout time.Duration, items []Item) []Item {
+func (e *engine) remember(c *Context, timeout time.Duration, ui UI, items []Item) []Item {
 	out := make([]Item, len(items))
 	copy(out, items)
 	e.mu.Lock()
@@ -224,7 +241,7 @@ func (e *engine) remember(c *Context, timeout time.Duration, items []Item) []Ite
 	for i := range out {
 		out[i].Ref = strconv.FormatInt(id, 10) + ":" + strconv.Itoa(i)
 	}
-	e.shows[id] = &shown{c: c, items: out, timeout: timeout}
+	e.shows[id] = &shown{c: c, items: out, timeout: timeout, ui: ui}
 	e.showOrder = append(e.showOrder, id)
 	for len(e.showOrder) > keepShown {
 		delete(e.shows, e.showOrder[0])
@@ -273,14 +290,14 @@ func (e *engine) done(ctx context.Context, h sdk.Host, params []any) (any, error
 	return nil, err
 }
 
-func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*Item, error) {
+func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*Item, *shown, error) {
 	it, sh, err := e.lookup(params)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	r, ok := e.b.sources[it.Source].(Resolver)
 	if !ok {
-		return nil, nil
+		return nil, nil, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
 	defer cancel()
@@ -289,7 +306,7 @@ func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*It
 	})
 	if err != nil {
 		log.Printf("cmp: source %s: resolve: %v", it.Source, err)
-		return nil, err
+		return nil, nil, err
 	}
 	out.Ref = it.Ref
 	out.Source = it.Source
@@ -301,23 +318,34 @@ func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*It
 		}
 	}
 	e.mu.Unlock()
-	return &out, nil
+	return &out, sh, nil
 }
 
 func (e *engine) resolve(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	it, err := e.resolveItem(ctx, h, params)
+	it, _, err := e.resolveItem(ctx, h, params)
 	if err != nil || it == nil {
 		return nil, err
 	}
 	return sdk.Generic(*it)
 }
 
+// selectItem resolves the item the user moved to and hands it to the UI
+// that showed it (InfoUpdater), which knows how to show it.
 func (e *engine) selectItem(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	it, err := e.resolveItem(ctx, h, params)
+	it, sh, err := e.resolveItem(ctx, h, params)
 	if err != nil || it == nil {
 		return nil, err
 	}
-	_, err = h.Call(ctx, "goda_cmp#_resolved", map[string]any{"ref": it.Ref, "item": it})
+	u, ok := sh.ui.(InfoUpdater)
+	if !ok {
+		return nil, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
+	defer cancel()
+	_, err = sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, u.UpdateInfo(ctx, h, *it) })
+	if err != nil {
+		log.Printf("cmp: ui %s: updateInfo: %v", sh.ui.Name(), err)
+	}
 	return nil, err
 }
 

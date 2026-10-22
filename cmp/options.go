@@ -66,7 +66,8 @@ type DynamicUIArgs struct {
 // dictionaries. Unknown keys are an error. The two functions cannot come from
 // Vim script; they are set in Go only.
 type Config struct {
-	// UI is "native" or "pum", or the name of a UI added to the builder.
+	// UI is the name of a UI added to the builder (AddUI), such as "native"
+	// or "pum". It must be set: there is no default.
 	UI string `json:"ui"`
 	// Sources lists the enabled sources in order.
 	Sources       []string                `json:"sources"`
@@ -99,7 +100,6 @@ type Config struct {
 
 func defaultConfig() Config {
 	return Config{
-		UI: "native",
 		SourceOptions: map[string]SourceOption{
 			"_": {
 				MinAutoCompleteLength: new(1),

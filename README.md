@@ -51,7 +51,9 @@ extensions and partial results.
    go.mod  main.go  config.go
         │  imports
         ▼
- goda-cmp.vim/cmp                 engine, interfaces, native + pum UI
+ goda-cmp.vim/cmp                 engine and interfaces (no UI, no source)
+ goda-cmp.vim/ext/...             bundled extensions: ui/native, ui/pum,
+                                  source/around, source/lsp, filter/...
  goda-cmp-source-*, goda-cmp-filter-*   extensions (Go modules, own repositories)
         │
         ▼  go build  →  one binary, started by goda.vim (Vim or Neovim)

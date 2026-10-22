@@ -51,7 +51,7 @@ func TestEvents(t *testing.T) {
 	anysrc := &eventSource{fakeSource: fakeSource{name: "any"}, specs: []cmp.EventSpec{
 		{Events: []string{"BufDelete"}},
 	}}
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(gosrc).AddSource(anysrc).AddSource(fakeSource{name: "plain"})
 	p, err := b.Plugin()
 	if err != nil {
@@ -109,7 +109,7 @@ func TestEvents(t *testing.T) {
 
 func TestBadEventName(t *testing.T) {
 	src := &eventSource{fakeSource: fakeSource{name: "s"}, specs: []cmp.EventSpec{{Events: []string{"BufEnter | !rm"}}}}
-	_, err := cmp.New().AddSource(src).Plugin()
+	_, err := newBuilder().AddSource(src).Plugin()
 	if err == nil || !strings.Contains(err.Error(), "bad event name") {
 		t.Errorf("err = %v", err)
 	}

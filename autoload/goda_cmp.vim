@@ -1,8 +1,10 @@
 " goda-cmp.vim - completion for Vim/Neovim on goda.vim
 "
-" The Go side (the user's own build of config.go, see README) gathers and
-" filters candidates; this file collects the context while typing and shows
-" the answer with the native popup or with pum.vim, as the Go side decides.
+" The Go side (the user's own build of config.go, see README) gathers, filters
+" and shows candidates; this file collects the context while typing and passes
+" on what the UI reports. It knows no extension: UIs and sources call the
+" editor themselves, and their Vim script (autoload/goda_cmp/ui/*.vim, for
+" instance) calls the goda_cmp#_* receivers below. Nothing here calls theirs.
 
 let s:seq = 0
 let s:timer = -1
@@ -109,11 +111,7 @@ function! goda_cmp#enable() abort
     autocmd!
     autocmd TextChangedI * call s:on_change('TextChangedI')
     autocmd TextChangedP * call s:on_change('TextChangedP')
-    autocmd InsertLeave * call goda_cmp#hide() | call s:restore_completeopt()
-    autocmd CompleteDone * call s:on_done(v:completed_item)
-    autocmd CompleteChanged * call s:on_select(get(v:event, 'completed_item', {}))
-    autocmd User PumCompleteDone call s:on_done(get(g:, 'pum#completed_item', {}))
-    autocmd User PumCompleteChanged call s:on_select(exists('*pum#current_item') ? pum#current_item() : {})
+    autocmd InsertLeave * call goda_cmp#hide()
   augroup END
   call s:setup_events()
 endfunction
@@ -282,13 +280,13 @@ function! s:options() abort
     try
       let s:opts[key] = goda#request('cmp', 'options', &filetype, patches)
     catch
-      return {'autoComplete': 0, 'delay': 0, 'ui': 'native'}
+      return {'autoComplete': 0, 'delay': 0}
     endtry
   endif
   return s:opts[key]
 endfunction
 
-function! s:context(manual) abort
+function! s:context(manual, event) abort
   let s:seq += 1
   return {
         \ 'seq': s:seq,
@@ -300,16 +298,17 @@ function! s:context(manual) abort
         \ 'filetype': &filetype,
         \ 'mode': 'i',
         \ 'manual': a:manual ? v:true : v:false,
+        \ 'event': a:event,
         \ 'patches': s:patches(),
         \ }
 endfunction
 
-function! s:send(manual) abort
+function! s:send(manual, event) abort
   let s:timer = -1
   if mode() !~# '^i' || !goda#is_running('cmp')
     return
   endif
-  call goda#notify('cmp', 'complete', s:context(a:manual))
+  call goda#notify('cmp', 'complete', s:context(a:manual, a:event))
 endfunction
 
 function! s:on_change(event) abort
@@ -317,14 +316,8 @@ function! s:on_change(event) abort
     return
   endif
   let opts = s:options()
-  " Text that the popup itself inserted (selecting an item) must not start a
-  " new completion.
-  if get(opts, 'ui', '') ==# 'pum' && pum#skip_complete()
-    return
-  endif
-  if a:event ==# 'TextChangedP' && get(complete_info(['selected']), 'selected', -1) >= 0
-    return
-  endif
+  " Text that the popup itself inserted (selecting an item) is told apart by
+  " the UI, on the Go side (cmp.Skipper).
   if !get(opts, 'autoComplete', 1)
     return
   endif
@@ -337,14 +330,14 @@ function! s:on_change(event) abort
   if s:timer != -1
     call timer_stop(s:timer)
   endif
-  let s:timer = timer_start(get(opts, 'delay', 0), {-> s:send(0)})
+  let s:timer = timer_start(get(opts, 'delay', 0), {-> s:send(0, a:event)})
 endfunction
 
 " Complete now, whatever the typed length. Meant for a mapping:
 "   inoremap <C-n> <Cmd>call goda_cmp#complete()<CR>
 function! goda_cmp#complete() abort
   let s:last = []
-  call s:send(1)
+  call s:send(1, '')
   return ''
 endfunction
 
@@ -363,34 +356,14 @@ function! goda_cmp#hide() abort
 endfunction
 
 " ---------------------------------------------------------------------------
-" UIs, called BY the plugin binary. An answer is dropped when a newer request
-" was made or the text changed in the meantime.
+" Receivers for the Vim script of UIs. They are the only way an extension's
+" Vim script reaches the core.
 
-function! s:fresh(r) abort
-  return a:r.seq == s:seq && a:r.tick == b:changedtick && mode() =~# '^i'
-endfunction
-
-" complete() obeys 'completeopt': without noinsert/noselect it inserts the first
-" candidate into the text, and with longest the common prefix. Neither is wanted
-" for completion while typing, so the options are adjusted for as long as the
-" insert mode lasts and put back when it ends. Other options (popup, preview,
-" ...) are kept.
-let s:saved_completeopt = v:null
-
-function! s:set_completeopt() abort
-  if s:saved_completeopt is v:null
-    let s:saved_completeopt = &completeopt
-  endif
-  let keep = filter(split(s:saved_completeopt, ','),
-        \ {_, v -> index(['longest', 'noinsert', 'noselect', 'menuone'], v) < 0})
-  let &completeopt = join(keep + ['menuone', 'noinsert', 'noselect'], ',')
-endfunction
-
-function! s:restore_completeopt() abort
-  if s:saved_completeopt isnot v:null
-    let &completeopt = s:saved_completeopt
-    let s:saved_completeopt = v:null
-  endif
+" Is a list the Go side asked to show still wanted? It is not when a newer
+" request was made or the text changed in the meantime.
+function! goda_cmp#_fresh(r) abort
+  return exists('s:enabled') && a:r.seq == s:seq && a:r.tick == b:changedtick
+        \ && mode() =~# '^i'
 endfunction
 
 " The user_data of a candidate is a reference the plugin gave it (see
@@ -403,83 +376,30 @@ function! s:ref(item) abort
   return type(ref) == v:t_string ? ref : ''
 endfunction
 
-function! s:on_done(item) abort
-  let s:selected_ref = ''
+" The user accepted ITEM (REASON "cancel": the popup was dismissed instead).
+" Items that are not goda-cmp's are ignored.
+function! goda_cmp#_done(item, reason) abort
   let ref = s:ref(a:item)
-  if ref !=# ''
-    " Accepting inserted nothing new: the TextChangedI that may follow must
-    " not start another completion for the word that was just completed.
-    if s:timer != -1
-      call timer_stop(s:timer)
-      let s:timer = -1
-    endif
-    let s:last = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  if ref ==# '' || !exists('s:enabled')
+    return
   endif
-  if ref !=# '' && goda#is_running('cmp') && get(v:event, 'reason', 'accept') !=# 'cancel'
+  " Accepting inserted nothing new: the TextChangedI that may follow must not
+  " start another completion for the word that was just completed.
+  if s:timer != -1
+    call timer_stop(s:timer)
+    let s:timer = -1
+  endif
+  let s:last = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  if a:reason !=# 'cancel' && goda#is_running('cmp')
     call goda#notify('cmp', 'done', ref)
   endif
 endfunction
 
-" Tell the plugin which candidate is selected, so that its source can resolve
-" it (LSP completionItem/resolve). The answer comes back to goda_cmp#_resolved.
-let s:selected_ref = ''
-function! s:on_select(item) abort
-  let s:selected_ref = s:ref(a:item)
-  if s:selected_ref !=# '' && goda#is_running('cmp')
-    call goda#notify('cmp', 'select', s:selected_ref)
-  endif
-endfunction
-
-function! goda_cmp#_resolved(r) abort
-  if a:r.ref !=# s:selected_ref
-    return 0
-  endif
-  let info = get(a:r.item, 'info', '')
-  if info ==# ''
-    return 0
-  endif
-  if exists('*pum#update_current_item') && exists('*pum#visible') && pum#visible()
-    call pum#update_current_item({'info': info})
-  elseif exists('*popup_findinfo')
-    " only possible when 'completeopt' has "popup" and the item had an info
-    let id = popup_findinfo()
-    if id > 0
-      call popup_settext(id, split(info, "\n"))
-    endif
-  endif
-  return 1
-endfunction
-
-function! goda_cmp#_native_show(r) abort
-  if !s:fresh(a:r)
-    return 0
-  endif
-  " While sources are still answering, do not take the popup away from a user
-  " who is choosing: complete() would drop the selection.
-  if !a:r.final && get(complete_info(['selected']), 'selected', -1) >= 0
-    return 0
-  endif
-  call s:set_completeopt()
-  call complete(a:r.col, a:r.items)
-  return 1
-endfunction
-
-function! goda_cmp#_native_hide() abort
-  if mode() =~# '^i' && pumvisible()
-    call complete(col('.'), [])
-  endif
-endfunction
-
-function! goda_cmp#_pum_show(r) abort
-  if !s:fresh(a:r)
-    return 0
-  endif
-  call pum#open(a:r.col, a:r.items)
-  return 1
-endfunction
-
-function! goda_cmp#_pum_hide() abort
-  if exists('*pum#visible') && pum#visible()
-    call pum#close()
+" The user moved to ITEM: its source may resolve it (LSP
+" completionItem/resolve), and the UI is told the result (cmp.InfoUpdater).
+function! goda_cmp#_select(item) abort
+  let ref = s:ref(a:item)
+  if ref !=# '' && exists('s:enabled') && goda#is_running('cmp')
+    call goda#notify('cmp', 'select', ref)
   endif
 endfunction

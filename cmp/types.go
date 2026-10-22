@@ -6,8 +6,8 @@
 //   - Source: produces candidates.
 //   - Filter: a matcher, sorter or converter; which one it is depends on the
 //     list it is placed in (Config.SourceOptions), not on the filter itself.
-//   - UI: shows the candidates, either with Vim's native popup ("native") or
-//     with pum.vim ("pum").
+//   - UI: shows the candidates; ext/ui/native uses Vim's popup menu and
+//     ext/ui/pum uses pum.vim. A configuration adds the ones it uses.
 //
 // Extensions live in their own modules; this package only fixes the
 // interfaces. A configuration is Go code (see examples/config), so it is type
@@ -41,6 +41,10 @@ type Context struct {
 	Manual bool `json:"manual"`
 	// Mode is "i" (insert mode). "c" (command line) is reserved.
 	Mode string `json:"mode"`
+	// Event is the autocmd that started the request (TextChangedI,
+	// TextChangedP), "" for goda_cmp#complete(). A UI's Skipper may look at
+	// it.
+	Event string `json:"event"`
 
 	// keyword is the source's keywordPattern, anchored at the end of Input.
 	keyword *regexp.Regexp

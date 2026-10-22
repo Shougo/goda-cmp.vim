@@ -12,13 +12,18 @@ import (
 	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/sorterlength"
 	"github.com/Shougo/goda-cmp.vim/ext/source/around"
+	"github.com/Shougo/goda-cmp.vim/ext/ui/native"
+	"github.com/Shougo/goda-cmp.vim/ext/ui/pum"
 )
 
 func main() {
 	b := cmp.New()
 
 	// Extensions: anything implementing cmp.Source / cmp.Filter / cmp.UI,
-	// from this repository or from your own modules.
+	// from this repository or from your own modules. Nothing is built in:
+	// even the popup is an extension, chosen with Config.UI.
+	b.AddUI(native.New())
+	b.AddUI(pum.New()) // needs pum.vim when it is chosen
 	b.AddSource(around.New(around.Params{MinLength: 2}))
 	b.AddFilter(matcherhead.New(matcherhead.Params{}))
 	b.AddFilter(sorterlength.New())

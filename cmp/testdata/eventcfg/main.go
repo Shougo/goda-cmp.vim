@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/Shougo/goda-cmp.vim/ext/ui/native"
 	"os"
 	"path/filepath"
 
@@ -33,7 +34,8 @@ func (recorder) OnEvent(_ context.Context, _ sdk.Host, ev cmp.Event) error {
 
 func main() {
 	b := cmp.New()
+	b.AddUI(native.New())
 	b.AddSource(recorder{})
-	b.PatchGlobal(cmp.Config{Sources: []string{"recorder"}})
+	b.PatchGlobal(cmp.Config{UI: "native", Sources: []string{"recorder"}})
 	b.Main()
 }

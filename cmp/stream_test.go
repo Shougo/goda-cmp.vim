@@ -57,7 +57,7 @@ func shows(h *cmptest.Host) []show {
 	var out []show
 	for _, c := range h.Calls() {
 		switch c.Fn {
-		case "goda_cmp#_native_show":
+		case "goda_cmp#ui#native#show":
 			m := c.Args[0].(map[string]any)
 			var s show
 			for _, it := range m["items"].([]cmp.Item) {
@@ -65,7 +65,7 @@ func shows(h *cmptest.Host) []show {
 			}
 			s.final = m["final"].(bool)
 			out = append(out, s)
-		case "goda_cmp#_native_hide":
+		case "goda_cmp#ui#native#hide":
 			out = append(out, show{final: true})
 		}
 	}
@@ -73,7 +73,7 @@ func shows(h *cmptest.Host) []show {
 }
 
 func TestStreamPartialResults(t *testing.T) {
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(streamSource{name: "lsp", steps: []step{
 		{0, []string{"fa"}},
 		{150 * time.Millisecond, []string{"fa", "fb"}}, // replaces, not appends
@@ -102,7 +102,7 @@ func TestStreamPartialResults(t *testing.T) {
 }
 
 func TestStreamKeepsEmittedItemsOnError(t *testing.T) {
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(streamSource{name: "lsp", steps: []step{{0, []string{"fa"}}}, err: errors.New("server died")})
 	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}})
 	h := uiHost()
@@ -114,7 +114,7 @@ func TestStreamKeepsEmittedItemsOnError(t *testing.T) {
 }
 
 func TestStreamKeepsEmittedItemsOnTimeout(t *testing.T) {
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(streamSource{name: "lsp", steps: []step{{0, []string{"fa"}}, {5 * time.Second, []string{"fa", "fz"}}}})
 	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}, SourceTimeout: new(100)})
 	h := uiHost()
@@ -140,7 +140,7 @@ func TestPlainSourcesShowOnce(t *testing.T) {
 }
 
 func TestStreamSupersededRequestStops(t *testing.T) {
-	b := cmp.New()
+	b := newBuilder()
 	var stopped atomic.Bool
 	b.AddSource(stopSource{streamSource{name: "lsp", steps: []step{{0, []string{"fa"}}, {5 * time.Second, []string{"fb"}}}}, &stopped})
 	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}, PartialInterval: new(10)})
@@ -215,7 +215,7 @@ func (s *lspSource) Resolve(_ context.Context, _ sdk.Host, a cmp.DoneArgs) (cmp.
 func refsOf(h *cmptest.Host) map[string]string {
 	refs := map[string]string{}
 	for _, c := range h.Calls() {
-		if c.Fn == "goda_cmp#_native_show" {
+		if c.Fn == "goda_cmp#ui#native#show" {
 			for _, it := range c.Args[0].(map[string]any)["items"].([]cmp.Item) {
 				refs[it.Word] = it.Ref
 			}
@@ -226,7 +226,7 @@ func refsOf(h *cmptest.Host) map[string]string {
 
 func TestInitDoneResolve(t *testing.T) {
 	src := &lspSource{name: "lsp"}
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(src)
 	b.PatchGlobal(cmp.Config{Sources: []string{"lsp"}})
 	p, err := b.Plugin()
@@ -278,7 +278,7 @@ func TestInitDoneResolve(t *testing.T) {
 
 func TestInitFailureDisablesSource(t *testing.T) {
 	src := &lspSource{name: "lsp", initErr: errors.New("no server")}
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(src)
 	b.AddSource(fakeSource{name: "a", items: []string{"alpha"}})
 	b.PatchGlobal(cmp.Config{Sources: []string{"lsp", "a"}})
@@ -312,7 +312,7 @@ func (s closeSource) Close(context.Context) error {
 
 func TestEngineClose(t *testing.T) {
 	var log []string
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(closeSource{fakeSource{name: "a"}, &log, nil})
 	b.AddSource(fakeSource{name: "plain"})
 	b.AddSource(closeSource{fakeSource{name: "b"}, &log, errors.New("boom")})

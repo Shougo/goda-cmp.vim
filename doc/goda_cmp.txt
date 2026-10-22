@@ -142,6 +142,7 @@ The configuration is Go code; see `examples/config`.  Its shape mirrors
 `ddc.ts`: >go
 
 	b := cmp.New()
+	b.AddUI(native.New())
 	b.AddSource(around.New(around.Params{MinLength: 2}))
 	b.AddFilter(matcherhead.New(matcherhead.Params{}))
 	b.PatchGlobal(cmp.Config{
@@ -158,9 +159,11 @@ The configuration is Go code; see `examples/config`.  Its shape mirrors
 Patches merge field by field: unset fields keep the previous value, maps are
 merged by key, slices are replaced.  Options named "_" are inherited by every
 source.  A name used but never added is reported when the binary starts.
+Nothing is built in: even the popup is an extension, and `UI` must name one
+that was added (there is no default).
 
 Settings:
-	UI			"native" or "pum" (or a UI you added)
+	UI			a UI added with AddUI ("native", "pum")
 	Sources			enabled sources, in order
 	SourceOptions		per source, "_" for all: Mark,
                                 MinAutoCompleteLength, MaxItems,
@@ -228,16 +231,28 @@ leave insert mode.
 ==============================================================================
 POPUP                                                         *goda-cmp-popup*
 
-UI "native" uses Vim's popup menu; UI "pum" uses pum.vim, configured in Vim
-script as usual (`pum#set_option()`, `pum#map#...`).  The UI can differ per
-filetype.
+A UI is an extension, added like the others and chosen with `UI`: >go
+
+	import "github.com/Shougo/goda-cmp.vim/ext/ui/native"
+	import "github.com/Shougo/goda-cmp.vim/ext/ui/pum"
+
+	b.AddUI(native.New())   // "native": Vim's popup menu
+	b.AddUI(pum.New())      // "pum": pum.vim, which must be installed
+<
+pum.vim is configured in Vim script as usual (`pum#set_option()`,
+`pum#map#...`).  The UI can differ per filetype, and can be switched from Vim
+script among the UIs that were added: `goda_cmp#patch_global({'ui': 'pum'})`.
+
+`Resolve` (|goda-cmp-extension|) shows its result through
+`pum#update_current_item()` with pum.vim, and in the native popup only when
+'completeopt' has "popup" and the item already had an info.
 
 ==============================================================================
 EXTENSIONS                                                *goda-cmp-extension*
 
 An extension is a Go module implementing an interface of package `cmp` and
 exporting a constructor.  `Source` has `Name` and `Gather`; `Filter` has
-`Name` and `Filter`.  A source that fails, panics or times out is skipped for
+`Name` and `Filter`; `UI` has `Name`, `Show` and `Hide`.  A source that fails, panics or times out is skipped for
 that request; the others still answer.
 
 A source for a language server can implement more.  The engine looks for each
@@ -259,9 +274,26 @@ a source that got a complete answer can filter it itself for the next
 keystrokes.
 
 `Close` is called through goda.vim's `sdk.Closer`; it needs a goda.vim that
-has it.  `Resolve` shows its result through `pum#update_current_item()` with
-pum.vim, and in the native popup only when 'completeopt' has "popup" and the
-item already had an info.
+has it.
+
+UIs~
+A UI may implement more, too:
+	Skipper		SkipCompletion: tell a change the UI made itself
+			(inserting the selected item) from typing; the
+			request is dropped
+	InfoUpdater	UpdateInfo: show what Resolve added to the item
+
+The core never calls an extension's Vim script, and has no Vim script of its
+own for any UI: an extension calls the editor itself, through the Host it is
+given.  A UI with Vim script of its own (`autoload/goda_cmp/ui/{name}.vim`
+for the ones of this repository) reports back through these receivers:
+	goda_cmp#_fresh({r})		is the list {r} (with "seq" and "tick"
+					from the ShowRequest) still wanted?
+	goda_cmp#_select({item})	the user moved to {item}
+	goda_cmp#_done({item}, {reason})	the user accepted {item}
+					({reason} "cancel": dismissed)
+{item} is the complete-item the UI was given; its user_data is the
+reference that leads back to the source.
 
 Buffer events~
 An EventHandler names the autocmd events it wants and for which filetypes

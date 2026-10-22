@@ -28,7 +28,7 @@ func withPatches(c map[string]any, patches map[string]any) map[string]any {
 }
 
 func twoSources() *cmp.Builder {
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"from_a"}})
 	b.AddSource(fakeSource{name: "b", items: []string{"from_b"}})
 	b.PatchGlobal(cmp.Config{Sources: []string{"a"}})
@@ -71,7 +71,7 @@ func TestRuntimePatchLayers(t *testing.T) {
 
 func TestRuntimePatchMapsMerge(t *testing.T) {
 	// A buffer patch for one source option keeps the rest of the options.
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"alpha", "beta"}})
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"a"},
@@ -85,7 +85,7 @@ func TestRuntimePatchMapsMerge(t *testing.T) {
 	}))
 	var items []cmp.Item
 	for _, c := range h.Calls() {
-		if c.Fn == "goda_cmp#_native_show" {
+		if c.Fn == "goda_cmp#ui#native#show" {
 			items = c.Args[0].(map[string]any)["items"].([]cmp.Item)
 		}
 	}
@@ -150,7 +150,7 @@ func TestOptionsHandlerSeesPatches(t *testing.T) {
 
 func TestKeywordPattern(t *testing.T) {
 	// The default stops at '-', the pattern of a command line does not.
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"foo-bar"}})
 	b.PatchGlobal(cmp.Config{Sources: []string{"a"}})
 
@@ -181,7 +181,7 @@ func TestKeywordPattern(t *testing.T) {
 }
 
 func TestNamedSourceAndFilter(t *testing.T) {
-	b := cmp.New()
+	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"one"}})
 	b.AddSource(cmp.NamedSource("a2", fakeSource{name: "a", items: []string{"two"}}))
 	b.PatchGlobal(cmp.Config{Sources: []string{"a", "a2"}})

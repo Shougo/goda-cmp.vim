@@ -30,7 +30,8 @@ type Builder struct {
 	errs   []string
 }
 
-// New returns a Builder that already knows the "native" and "pum" UIs.
+// New returns an empty Builder: sources, filters and UIs are all added by
+// the configuration.
 func New() *Builder {
 	b := &Builder{
 		sources: map[string]Source{},
@@ -39,8 +40,6 @@ func New() *Builder {
 		global:  defaultConfig(),
 		ft:      map[string]Config{},
 	}
-	b.AddUI(NativeUI())
-	b.AddUI(PumUI())
 	return b
 }
 
@@ -69,6 +68,9 @@ func (b *Builder) AddFilter(f Filter) *Builder {
 
 // AddUI registers a UI under its Name.
 func (b *Builder) AddUI(u UI) *Builder {
+	if _, dup := b.uis[u.Name()]; dup {
+		b.fail("ui %q registered twice", u.Name())
+	}
 	b.uis[u.Name()] = u
 	return b
 }
@@ -160,6 +162,9 @@ func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
 	errs = append(errs, b.checkEvents()...)
 	errs = append(errs, b.checkConfig("global", b.global)...)
+	if b.global.UI == "" {
+		errs = append(errs, `global: no ui is set: add one (b.AddUI(native.New()), see ext/ui) and set Config.UI to its name`)
+	}
 	for ft, c := range b.ft {
 		errs = append(errs, b.checkConfig("filetype "+ft, c)...)
 	}

@@ -11,6 +11,7 @@ import (
 
 	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
+	"github.com/Shougo/goda-cmp.vim/ext/ui/native"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
@@ -45,6 +46,7 @@ func (fakeLSP) OnCompleteDone(_ context.Context, _ sdk.Host, a cmp.DoneArgs) err
 
 func main() {
 	b := cmp.New()
+	b.AddUI(native.New())
 	b.AddSource(fakeLSP{})
 	b.AddFilter(matcherhead.New(matcherhead.Params{}))
 	b.PatchGlobal(cmp.Config{
