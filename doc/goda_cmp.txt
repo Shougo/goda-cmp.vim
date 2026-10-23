@@ -14,6 +14,7 @@ Selecting candidates	|goda-cmp-select|
 Popup			|goda-cmp-popup|
 Extensions		|goda-cmp-extension|
 Partial results		|goda-cmp-partial|
+Command line		|goda-cmp-cmdline|
 Language servers	|goda-cmp-lsp|
 FAQ			|goda-cmp-faq|
 
@@ -102,6 +103,15 @@ goda_cmp#complete()
 goda_cmp#hide()
 		Close the popup.
 
+                                                   *goda_cmp#enable_cmdline()*
+goda_cmp#enable_cmdline()
+		Complete on the next command line, until it is left; see
+		|goda-cmp-cmdline|.  Enables goda-cmp first if needed.
+
+                                                  *goda_cmp#disable_cmdline()*
+goda_cmp#disable_cmdline()
+		Stop completing on the command line now.
+
                                                      *goda_cmp#patch_global()*
 goda_cmp#patch_global({patch})
 goda_cmp#patch_filetype({filetype}, {patch})
@@ -169,6 +179,8 @@ Settings:
                                 MinAutoCompleteLength, MaxItems,
                                 KeywordPattern, ForceCompletionPattern,
                                 Matchers, Sorters, Converters
+	CmdlineSources		sources of the command line, by
+				|getcmdtype()|; see |goda-cmp-cmdline|
 	PostFilters		filters run on the merged list
 	AutoComplete		completion while typing (default on)
 	AutoCompleteDelay	debounce in ms (default 0)
@@ -319,6 +331,61 @@ same name (`matcherhead.New()` is the filter "matcherhead"), and the
 constructor `New(Params)` (or `New()` when there is nothing to set).  The
 name says nothing about the kind: a filter is a matcher, a sorter or a
 converter by the list it is put in.
+
+==============================================================================
+COMMAND LINE                                                *goda-cmp-cmdline*
+
+Completion on the command line works as in ddc.vim.  It is enabled for one
+command line at a time, typically from the mapping that opens it, and its end
+fires the |User| autocmd "GodaCmpCmdlineLeave": >go
+
+	import "github.com/Shougo/goda-cmp.vim/ext/source/cmdline"
+	import "github.com/Shougo/goda-cmp.vim/ext/ui/pum"
+
+	b.AddUI(pum.New())
+	b.AddSource(cmdline.New())
+	b.PatchGlobal(cmp.Config{
+	    UI: "pum",
+	    CmdlineSources: map[string][]string{
+	        ":": {"cmdline", "around"},
+	    },
+	    SourceOptions: map[string]cmp.SourceOption{
+	        "cmdline": {Mark: "cmdline"},
+	    },
+	})
+<
+>vim
+	nnoremap : <Cmd>call CommandlinePre()<CR>:
+
+	function CommandlinePre() abort
+	  cnoremap <Tab>   <Cmd>call pum#map#insert_relative(+1)<CR>
+	  cnoremap <S-Tab> <Cmd>call pum#map#insert_relative(-1)<CR>
+	  cnoremap <C-y>   <Cmd>call pum#map#confirm()<CR>
+	  cnoremap <C-e>   <Cmd>call pum#map#cancel()<CR>
+	  autocmd User GodaCmpCmdlineLeave ++once call CommandlinePost()
+	  call goda_cmp#enable_cmdline()
+	endfunction
+	function CommandlinePost() abort
+	  silent! cunmap <Tab>
+	  silent! cunmap <S-Tab>
+	  silent! cunmap <C-y>
+	  silent! cunmap <C-e>
+	endfunction
+<
+`CmdlineSources` takes the place of `Sources` on the command line; its keys
+are the command-line types of |getcmdtype()| (":", "/", "?", "@" for
+|input()|, ...).  A type without sources is not completed; "=" (the
+expression register) never is.  Sources see `Context.Mode` "c",
+`Context.CmdType` and the command line before the cursor as `Input`.
+
+The UI must be able to show candidates there (`cmp.CmdlineUI`): "pum" can,
+"native" cannot, since |complete()| works in insert mode only.  With
+`CmdlineSources` set and a UI that cannot, the binary reports a
+configuration error.  The UI can be chosen per filetype, as usual.
+
+`ext/source/cmdline` (a port of ddc-source-cmdline) offers what
+|getcompletion()| does for the command line.  Put "fuzzy" in 'wildoptions'
+for fuzzy matched items.
 
 ==============================================================================
 PARTIAL RESULTS                                             *goda-cmp-partial*

@@ -33,10 +33,28 @@ function! DumpPopup() abort
       endfor
     endif
   endif
-  call writefile([json_encode({'visible': visible ? v:true : v:false, 'words': words, 'line': getline('.')})], $GODA_OUT, 'a')
+  call writefile([json_encode({'visible': visible ? v:true : v:false, 'words': words, 'line': getline('.'),
+        \ 'cmdline': mode() ==# 'c' ? getcmdline() : ''})], $GODA_OUT, 'a')
   return ''
 endfunction
 inoremap <C-]> <Cmd>call DumpPopup()<CR>
+cnoremap <C-]> <Cmd>call DumpPopup()<CR>
+
+" $GODA_CMDLINE: ":" enables command-line completion for that command line,
+" as in ddc.vim's documentation, and its end is recorded.
+if !empty($GODA_CMDLINE)
+  nnoremap : <Cmd>call goda_cmp#enable_cmdline()<CR>:
+  autocmd User GodaCmpCmdlineLeave
+        \ call writefile([json_encode({'left': v:true})], $GODA_OUT, 'a')
+  " With pum.vim itself (not the stand-in): select and accept as its
+  " documentation does.
+  if !empty($GODA_REAL_PUM)
+    " The first Ctrl-N selects the first item.
+    call pum#set_option('auto_select', v:false)
+    cnoremap <C-n> <Cmd>call pum#map#insert_relative(+1)<CR>
+    cnoremap <C-y> <Cmd>call pum#map#confirm()<CR>
+  endif
+endif
 
 " The pum scenario switches the popup from Vim script.
 if !empty($PUM_RTP)

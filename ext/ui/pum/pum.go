@@ -1,5 +1,5 @@
 // Package pum is a UI that shows candidates with pum.vim, which must be
-// installed. Its key mappings and options are configured in Vim script as
+// installed. It works on the command line too (cmp.CmdlineUI). Its key mappings and options are configured in Vim script as
 // usual (pum#set_option, pum#map#...). Its Vim script is
 // autoload/goda_cmp/ui/pum.vim.
 package pum
@@ -22,6 +22,7 @@ func (ui) Show(ctx context.Context, h sdk.Host, r cmp.ShowRequest) error {
 	_, err := h.Call(ctx, "goda_cmp#ui#pum#show", map[string]any{
 		"seq":   r.Context.Seq,
 		"tick":  r.Context.Tick,
+		"mode":  r.Context.Mode,
 		"col":   r.Col,
 		"items": r.Items,
 		"final": r.Final,
@@ -59,7 +60,11 @@ func (ui) UpdateInfo(ctx context.Context, h sdk.Host, it cmp.Item) error {
 	return err
 }
 
+// ShowsCmdline: pum.vim opens on the command line as well.
+func (ui) ShowsCmdline() bool { return true }
+
 var (
+	_ cmp.CmdlineUI   = ui{}
 	_ cmp.Skipper     = ui{}
 	_ cmp.InfoUpdater = ui{}
 )

@@ -170,6 +170,21 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 	e.cancel = cancel
 	e.mu.Unlock()
 
+	// The command line has its own sources, and needs a UI that can show
+	// them there.
+	if c.Mode == "c" {
+		cfg.Sources = cfg.CmdlineSources[c.CmdType]
+		if len(cfg.Sources) == 0 {
+			return nil, nil
+		}
+		u, err := e.ui(cfg.UI)
+		if err != nil {
+			return nil, err
+		}
+		if cu, ok := u.(CmdlineUI); !ok || !cu.ShowsCmdline() {
+			return nil, fmt.Errorf("ui %q cannot show candidates on the command line", cfg.UI)
+		}
+	}
 	if cfg.DynamicSources != nil {
 		names, err := sdk.Guard(ctx, func() ([]string, error) {
 			return cfg.DynamicSources(ctx, h, DynamicSourcesArgs{Context: &c, Sources: cfg.Sources})

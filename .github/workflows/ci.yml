@@ -26,6 +26,12 @@ jobs:
         with:
           repository: Shougo/goda.vim
           path: goda.vim
+      # pum.vim itself, for the pum scenarios (in the editors new enough for
+      # it; the others use the stand-in only).
+      - uses: actions/checkout@v7
+        with:
+          repository: Shougo/pum.vim
+          path: pum.vim
       # The end-to-end tests run in every editor they find.
       - name: Install Vim
         uses: rhysd/action-setup-vim@v1
@@ -53,3 +59,5 @@ jobs:
       - run: gofmt -l . | tee /dev/stderr | (! read)
       - run: go vet ./...
       - run: go test -race ./...
+        env:
+          GODA_CMP_PUM: ${{ github.workspace }}/pum.vim

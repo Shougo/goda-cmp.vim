@@ -39,8 +39,13 @@ type Context struct {
 	// Manual is set when the user asked for completion explicitly;
 	// MinAutoCompleteLength is ignored then.
 	Manual bool `json:"manual"`
-	// Mode is "i" (insert mode). "c" (command line) is reserved.
+	// Mode is "i" (insert mode) or "c" (the command line, see
+	// goda_cmp#enable_cmdline()). On the command line, Input is the command
+	// line before the cursor and Col the cursor's byte column in it; Lnum and
+	// Bufnr are those of the current window.
 	Mode string `json:"mode"`
+	// CmdType is getcmdtype() on the command line (":", "/", "@", ...).
+	CmdType string `json:"cmdtype"`
 	// Event is the autocmd that started the request (TextChangedI,
 	// TextChangedP), "" for goda_cmp#complete(). A UI's Skipper may look at
 	// it.

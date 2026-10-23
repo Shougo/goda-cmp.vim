@@ -72,6 +72,11 @@ type Config struct {
 	// Sources lists the enabled sources in order.
 	Sources       []string                `json:"sources"`
 	SourceOptions map[string]SourceOption `json:"sourceOptions"`
+	// CmdlineSources lists the sources of the command line by its type
+	// (getcmdtype(): ":", "/", "@", ...), as ddc.vim's cmdlineSources: on
+	// the command line they replace Sources. The UI must be able to show
+	// candidates there (CmdlineUI, such as "pum"). Merged by key.
+	CmdlineSources map[string][]string `json:"cmdlineSources"`
 	// PostFilters run on the merged list of all sources.
 	PostFilters []string `json:"postFilters"`
 
@@ -124,6 +129,15 @@ func merge(base, p Config) Config {
 	}
 	if p.PostFilters != nil {
 		out.PostFilters = append([]string{}, p.PostFilters...)
+	}
+	if base.CmdlineSources != nil || p.CmdlineSources != nil {
+		out.CmdlineSources = make(map[string][]string, len(base.CmdlineSources)+len(p.CmdlineSources))
+		for k, v := range base.CmdlineSources {
+			out.CmdlineSources[k] = v
+		}
+		for k, v := range p.CmdlineSources {
+			out.CmdlineSources[k] = append([]string{}, v...)
+		}
 	}
 	if p.PartialInterval != nil {
 		out.PartialInterval = p.PartialInterval

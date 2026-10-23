@@ -549,3 +549,68 @@ func TestPluginFitsTheHost(t *testing.T) {
 		}
 	}
 }
+
+// On the command line the sources are CmdlineSources of the command-line
+// type, shown by a UI that works there.
+func TestCmdlineSources(t *testing.T) {
+	b := newBuilder()
+	b.AddSource(fakeSource{name: "buf", items: []string{"buffer_word"}})
+	b.AddSource(fakeSource{name: "cmd", items: []string{"command"}})
+	b.PatchGlobal(cmp.Config{
+		UI:             "pum",
+		Sources:        []string{"buf"},
+		CmdlineSources: map[string][]string{":": {"cmd"}},
+	})
+	h := uiHost()
+	h.Funcs["goda_cmp#ui#pum#show"] = func(...any) (any, error) { return nil, nil }
+	shown := func() []string {
+		var words []string
+		for _, c := range h.Calls() {
+			if c.Fn == "goda_cmp#ui#pum#show" {
+				words = nil
+				for _, it := range c.Args[0].(map[string]any)["items"].([]cmp.Item) {
+					words = append(words, it.Word)
+				}
+			}
+		}
+		return words
+	}
+	c := ctxMap(1, "c", "")
+	c["mode"], c["cmdtype"] = "c", ":"
+	complete(t, b, h, c)
+	if w := shown(); !reflect.DeepEqual(w, []string{"command"}) {
+		t.Errorf(": shows %q", w)
+	}
+	c = ctxMap(2, "b", "")
+	complete(t, b, h, c)
+	if w := shown(); !reflect.DeepEqual(w, []string{"buffer_word"}) {
+		t.Errorf("insert mode shows %q", w)
+	}
+	// A command-line type without sources: nothing.
+	n := len(h.Calls())
+	c = ctxMap(3, "c", "")
+	c["mode"], c["cmdtype"] = "c", "/"
+	complete(t, b, h, c)
+	for _, call := range h.Calls()[n:] {
+		if call.Fn == "goda_cmp#ui#pum#show" {
+			t.Errorf("/ showed something")
+		}
+	}
+}
+
+func TestCmdlineNeedsCmdlineUI(t *testing.T) {
+	b := newBuilder() // UI "native", which cannot show on the command line
+	b.AddSource(fakeSource{name: "cmd"})
+	b.PatchGlobal(cmp.Config{CmdlineSources: map[string][]string{":": {"cmd"}}})
+	if err := b.Validate(); err == nil || !strings.Contains(err.Error(), `ui "native" cannot show candidates on the command line`) {
+		t.Errorf("native: err = %v", err)
+	}
+	b.PatchGlobal(cmp.Config{UI: "pum"})
+	if err := b.Validate(); err != nil {
+		t.Errorf("pum: %v", err)
+	}
+	b.PatchGlobal(cmp.Config{CmdlineSources: map[string][]string{"/": {"nope"}}})
+	if err := b.Validate(); err == nil || !strings.Contains(err.Error(), `unknown source "nope" in cmdlineSources["/"]`) {
+		t.Errorf("unknown source: err = %v", err)
+	}
+}

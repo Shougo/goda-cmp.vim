@@ -20,6 +20,7 @@ func (ui) Show(ctx context.Context, h sdk.Host, r cmp.ShowRequest) error {
 	_, err := h.Call(ctx, "goda_cmp#ui#native#show", map[string]any{
 		"seq":   r.Context.Seq,
 		"tick":  r.Context.Tick,
+		"mode":  r.Context.Mode,
 		"col":   r.Col,
 		"items": r.Items,
 		// false while sources are still answering (see cmp.StreamSource)

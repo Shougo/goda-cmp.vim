@@ -127,6 +127,13 @@ func (b *Builder) checkConfig(where string, cfg Config) []string {
 			errs = append(errs, fmt.Sprintf("%s: unknown source %q", where, s))
 		}
 	}
+	for typ, names := range cfg.CmdlineSources {
+		for _, s := range names {
+			if _, ok := b.sources[s]; !ok {
+				errs = append(errs, fmt.Sprintf("%s: unknown source %q in cmdlineSources[%q]", where, s, typ))
+			}
+		}
+	}
 	for _, f := range cfg.PostFilters {
 		if _, ok := b.filters[f]; !ok {
 			errs = append(errs, fmt.Sprintf("%s: unknown filter %q in postFilters", where, f))
@@ -157,6 +164,31 @@ func (b *Builder) checkConfig(where string, cfg Config) []string {
 	return errs
 }
 
+// checkCmdlineUI reports command-line sources set with a UI that cannot show
+// them (cfg is a resolved configuration).
+func (b *Builder) checkCmdlineUI(where string, cfg Config) []string {
+	if !hasCmdlineSources(cfg) {
+		return nil
+	}
+	u, ok := b.uis[cfg.UI]
+	if !ok {
+		return nil // reported as an unknown ui
+	}
+	if c, ok := u.(CmdlineUI); !ok || !c.ShowsCmdline() {
+		return []string{fmt.Sprintf("%s: cmdlineSources are set, but ui %q cannot show candidates on the command line (use one that can, such as \"pum\")", where, cfg.UI)}
+	}
+	return nil
+}
+
+func hasCmdlineSources(cfg Config) bool {
+	for _, names := range cfg.CmdlineSources {
+		if len(names) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
 // Validate reports every problem of the configuration made in Go.
 func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
@@ -164,6 +196,10 @@ func (b *Builder) Validate() error {
 	errs = append(errs, b.checkConfig("global", b.global)...)
 	if b.global.UI == "" {
 		errs = append(errs, `global: no ui is set: add one (b.AddUI(native.New()), see ext/ui) and set Config.UI to its name`)
+	}
+	errs = append(errs, b.checkCmdlineUI("global", b.global)...)
+	for ft, c := range b.ft {
+		errs = append(errs, b.checkCmdlineUI("filetype "+ft, merge(b.global, c))...)
 	}
 	for ft, c := range b.ft {
 		errs = append(errs, b.checkConfig("filetype "+ft, c)...)

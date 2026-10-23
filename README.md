@@ -79,11 +79,10 @@ without it.
 
 ## Not implemented yet
 
-Compared with ddc.vim: command-line completion (`Context.Mode` is reserved for
-it), `sourceParams` set from Vim script (parameters
-are Go values given to the constructor), and `ignoreCase` options.
-`Resolve` and `OnCompleteDone` are tested with pum.vim
-only through a stand-in; how a resolved `Info` is drawn is up to pum.vim.
+Compared with ddc.vim: `sourceParams` set from Vim script (parameters are Go
+values given to the constructor), and `ignoreCase` options. Command-line
+completion is there (`:help goda-cmp-cmdline`), without a previewer for the
+cmdline source.
 
 ## License
 

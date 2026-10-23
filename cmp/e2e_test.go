@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -15,6 +16,8 @@ type dump struct {
 	Visible bool     `json:"visible"`
 	Words   []string `json:"words"`
 	Line    string   `json:"line"`
+	Cmdline string   `json:"cmdline"`
+	Left    bool     `json:"left"` // User GodaCmpCmdlineLeave
 	Error   string   `json:"error"`
 	Buffer  any      `json:"buffer"`
 }
@@ -108,14 +111,14 @@ func TestRealEditor(t *testing.T) {
 
 		check := func(t *testing.T, ds []dump) {
 			want := []dump{
-				{true, []string{"foobar", "foo_baz", "foobarbaz"}, "fo", "", nil},
-				{true, []string{"foobar", "foo_baz", "foobarbaz"}, "foo", "", nil},
-				{true, []string{"foobar", "foobarbaz"}, "foob", "", nil},
-				{false, nil, "qq", "", nil}, // nothing in the buffer starts with qq
+				{Visible: true, Words: []string{"foobar", "foo_baz", "foobarbaz"}, Line: "fo"},
+				{Visible: true, Words: []string{"foobar", "foo_baz", "foobarbaz"}, Line: "foo"},
+				{Visible: true, Words: []string{"foobar", "foobarbaz"}, Line: "foob"},
+				{Visible: false, Words: nil, Line: "qq"}, // nothing in the buffer starts with qq
 				// Sources switched off for the buffer by a run-time patch.
-				{false, nil, "fo", "", nil},
+				{Visible: false, Words: nil, Line: "fo"},
 				// Put back: completion works again.
-				{true, []string{"foob", "foobar", "foo_baz", "foobarbaz"}, "foo", "", nil},
+				{Visible: true, Words: []string{"foob", "foobar", "foo_baz", "foobarbaz"}, Line: "foo"},
 			}
 			if len(ds) != len(want)+1 {
 				t.Fatalf("got %d records, want %d", len(ds), len(want)+1)
@@ -145,7 +148,7 @@ func TestRealEditor(t *testing.T) {
 		// with the right items; it cannot check how pum.vim draws them.
 		fake, _ := filepath.Abs("testdata/fakepum")
 		t.Run("pum-with-stand-in", func(t *testing.T) { check(t, run(t, fake, "")) })
-		if pum := os.Getenv("GODA_CMP_PUM"); pum != "" {
+		if pum := os.Getenv("GODA_CMP_PUM"); pum != "" && supportsPum(ed) {
 			t.Run("pum", func(t *testing.T) { check(t, run(t, pum, "")) })
 		}
 	})
@@ -435,4 +438,116 @@ qa!
 			t.Errorf("the wrong binary must stop and the other one keep running:\n%s", got)
 		}
 	})
+}
+
+// TestRealCmdline: command-line completion in a real editor. ":" enables it
+// for that command line (as in ddc.vim's documentation), the cmdline source
+// offers what getcompletion() does, the pum UI shows it, and leaving the
+// command line ends it: the next one ("/") is not completed. It runs with the
+// pum.vim stand-in, and with pum.vim itself when GODA_CMP_PUM names a
+// checkout and the editor is new enough for it.
+func TestRealCmdline(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/cmdlinecfg")
+	fake, _ := filepath.Abs("testdata/fakepum")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		pums := map[string]string{"pum-stand-in": fake}
+		if real := os.Getenv("GODA_CMP_PUM"); real != "" && supportsPum(ed) {
+			pums["pum"] = real
+		}
+		for name, pumDir := range pums {
+			t.Run(name, func(t *testing.T) {
+				dir := t.TempDir()
+				text := filepath.Join(dir, "text.txt")
+				if err := os.WriteFile(text, []byte("x\n"), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				out := filepath.Join(dir, "out.jsonl")
+				steps := `[
+				  [":", 0.5], ["set filety", 1.5], ["\u001d", 0.3],
+				  ["\u001b", 0.5],
+				  ["/filety", 1.0], ["\u001d", 0.3],
+				  ["\u001b", 0.3]
+				]`
+				real := name == "pum"
+				if real {
+					// Then select (Ctrl-N inserts the item: no new
+					// completion for that) and accept with Ctrl-Y.
+					steps = `[
+					  [":", 0.5], ["set filety", 1.5], ["\u001d", 0.3],
+					  ["\u001b", 0.5],
+					  ["/filety", 1.0], ["\u001d", 0.3],
+					  ["\u001b", 0.3],
+					  [":", 0.5], ["set filety", 1.5], ["\u000e", 0.8], ["\u001d", 0.3],
+					  ["\u0019", 0.8], ["\u001d", 0.3],
+					  ["\u001b", 0.3]
+					]`
+				}
+				cmd := exec.Command("python3", "-I", "testdata/drive.py", ed.Bin, "testdata/vimrc.vim", text, steps)
+				cmd.Env = append(os.Environ(),
+					"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
+					"GODA_NO_PATCH_MAPS=1", "GODA_CMDLINE=1", "PUM_RTP="+pumDir)
+				if real {
+					cmd.Env = append(cmd.Env, "GODA_REAL_PUM=1")
+				}
+				if b, err := cmd.CombinedOutput(); err != nil {
+					t.Fatalf("driver: %v\n%s", err, b)
+				}
+				raw, err := os.ReadFile(out)
+				if err != nil {
+					t.Fatalf("nothing recorded: %v", err)
+				}
+				var ds []dump
+				for l := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+					var d dump
+					if err := json.Unmarshal([]byte(l), &d); err != nil {
+						t.Fatalf("bad record %q: %v", l, err)
+					}
+					ds = append(ds, d)
+				}
+				t.Logf("records: %+v", ds)
+				// (The driver's closing ":qa!" adds one more "left".)
+				if len(ds) < 3 {
+					t.Fatalf("got %d records, want 3", len(ds))
+				}
+				if !ds[0].Visible || ds[0].Cmdline != "set filety" || !slices.Contains(ds[0].Words, "filetype") {
+					t.Errorf(`":set filety": %+v`, ds[0])
+				}
+				if !ds[1].Left {
+					t.Errorf("leaving the command line was not reported: %+v", ds[1])
+				}
+				if ds[2].Visible || ds[2].Cmdline != "filety" {
+					t.Errorf(`"/filety" (not enabled): %+v`, ds[2])
+				}
+				if real {
+					// ds[3] left "/"? No: "/" was not enabled. ds[3]: after
+					// Ctrl-N, ds[4]: after Ctrl-Y.
+					if len(ds) < 5 {
+						t.Fatalf("got %d records, want 5", len(ds))
+					}
+					if ds[3].Cmdline != "set filetype" || !ds[3].Visible {
+						t.Errorf("after Ctrl-N: %+v", ds[3])
+					}
+					if ds[4].Cmdline != "set filetype" || ds[4].Visible {
+						t.Errorf("after Ctrl-Y: %+v", ds[4])
+					}
+				}
+			})
+		}
+	})
+}
+
+// supportsPum reports whether the editor is new enough for pum.vim.
+func supportsPum(ed e2e.Editor) bool {
+	script := filepath.Join(os.TempDir(), "goda-cmp-pumcheck.vim")
+	if err := os.WriteFile(script, []byte("if has('patch-9.1.0448') || has('nvim-0.10')\n  qa!\nendif\ncq!\n"), 0o644); err != nil {
+		return false
+	}
+	defer os.Remove(script)
+	return exec.Command(ed.Bin, ed.Headless(script)...).Run() == nil
 }

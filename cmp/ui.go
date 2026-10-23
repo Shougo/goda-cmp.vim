@@ -21,6 +21,14 @@ type Skipper interface {
 	SkipCompletion(ctx context.Context, h sdk.Host, c *Context) (bool, error)
 }
 
+// CmdlineUI is implemented by UIs that can show candidates on the command
+// line (Context.Mode "c"); ShowsCmdline reports whether this one does. Vim's
+// own popup menu cannot (complete() works in insert mode only), pum.vim can.
+// Command-line completion (Config.CmdlineSources) needs such a UI.
+type CmdlineUI interface {
+	ShowsCmdline() bool
+}
+
 // InfoUpdater is implemented by UIs that can show what a source's Resolve
 // added to the selected item (its Info). The engine calls it on the UI that
 // showed the item; the item carries the Ref the UI gave it as user_data.

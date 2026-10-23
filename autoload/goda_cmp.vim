@@ -8,7 +8,8 @@
 
 let s:seq = 0
 let s:timer = -1
-let s:last = []        " [bufnr, lnum, input] of the last request
+let s:last = []        " [bufnr, lnum, input] of the last request ("c" for lnum
+                       " on the command line)
 " [bufnr, input] when a candidate was just accepted: no new completion for the
 " same text, even when the line moved (an import added above it, say).
 let s:accepted = []
@@ -128,10 +129,50 @@ function! goda_cmp#disable() abort
     return
   endif
   unlet s:enabled
+  call goda_cmp#disable_cmdline()
   silent! autocmd! goda_cmp
   silent! autocmd! goda_cmp_events
   call goda_cmp#hide()
   call goda#stop('cmp')
+endfunction
+
+" ---------------------------------------------------------------------------
+" Command-line completion, as ddc#enable_cmdline_completion(): enabled for the
+" next command line only, for example from the mapping that opens it:
+"   nnoremap : <Cmd>call goda_cmp#enable_cmdline()<CR>:
+" The sources are Config.CmdlineSources of the command-line type, and the UI
+" must be able to show them there (pum).
+
+function! goda_cmp#enable_cmdline() abort
+  call goda_cmp#enable()
+  if !exists('s:enabled')
+    return
+  endif
+  let s:cmdline = 1
+  augroup goda_cmp_cmdline
+    autocmd!
+    autocmd CmdlineEnter * call s:on_change('CmdlineEnter')
+    " "=": the expression register, where completing is no help.
+    autocmd CmdlineChanged * if getcmdtype() !=# '='
+          \ | call s:on_change('CmdlineChanged') | endif
+    autocmd CmdlineLeave * call s:cmdline_leave()
+  augroup END
+endfunction
+
+function! goda_cmp#disable_cmdline() abort
+  if !exists('s:cmdline')
+    return
+  endif
+  unlet s:cmdline
+  silent! autocmd! goda_cmp_cmdline
+  if exists('#User#GodaCmpCmdlineLeave')
+    doautocmd <nomodeline> User GodaCmpCmdlineLeave
+  endif
+endfunction
+
+function! s:cmdline_leave() abort
+  call goda_cmp#hide()
+  call goda_cmp#disable_cmdline()
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -293,17 +334,35 @@ function! s:options() abort
   return s:opts[key]
 endfunction
 
+" Insert mode or, after goda_cmp#enable_cmdline(), the command line.
+function! s:cmdline() abort
+  return mode() ==# 'c' && exists('s:cmdline')
+endfunction
+
+" The text before the cursor: in the buffer, or on the command line.
+function! s:input() abort
+  return s:cmdline() ? strpart(getcmdline(), 0, getcmdpos() - 1)
+        \ : strpart(getline('.'), 0, col('.') - 1)
+endfunction
+
+" What identifies a request: the same key twice is not asked again.
+function! s:key() abort
+  return [bufnr('%'), s:cmdline() ? 'c' : line('.'), s:input()]
+endfunction
+
 function! s:context(manual, event) abort
   let s:seq += 1
+  let cmdline = s:cmdline()
   return {
         \ 'seq': s:seq,
         \ 'tick': b:changedtick,
         \ 'bufnr': bufnr('%'),
         \ 'lnum': line('.'),
-        \ 'col': col('.'),
-        \ 'input': strpart(getline('.'), 0, col('.') - 1),
+        \ 'col': cmdline ? getcmdpos() : col('.'),
+        \ 'input': s:input(),
         \ 'filetype': &filetype,
-        \ 'mode': 'i',
+        \ 'mode': cmdline ? 'c' : 'i',
+        \ 'cmdtype': cmdline ? getcmdtype() : '',
         \ 'manual': a:manual ? v:true : v:false,
         \ 'event': a:event,
         \ 'patches': s:patches(),
@@ -312,7 +371,7 @@ endfunction
 
 function! s:send(manual, event) abort
   let s:timer = -1
-  if mode() !~# '^i' || !goda#is_running('cmp')
+  if !(mode() =~# '^i' || s:cmdline()) || !goda#is_running('cmp')
     return
   endif
   call goda#notify('cmp', 'complete', s:context(a:manual, a:event))
@@ -328,7 +387,7 @@ function! s:on_change(event) abort
   if !get(opts, 'autoComplete', 1)
     return
   endif
-  let key = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  let key = s:key()
   if key ==# s:last
     return
   endif
@@ -377,8 +436,13 @@ endfunction
 " Is a list the Go side asked to show still wanted? It is not when a newer
 " request was made or the text changed in the meantime.
 function! goda_cmp#_fresh(r) abort
-  return exists('s:enabled') && a:r.seq == s:seq && a:r.tick == b:changedtick
-        \ && mode() =~# '^i'
+  if !exists('s:enabled') || a:r.seq != s:seq
+    return 0
+  endif
+  if get(a:r, 'mode', 'i') ==# 'c'
+    return mode() ==# 'c'
+  endif
+  return a:r.tick == b:changedtick && mode() =~# '^i'
 endfunction
 
 " The user_data of a candidate is a reference the plugin gave it (see
@@ -404,7 +468,7 @@ function! goda_cmp#_done(item, reason) abort
     call timer_stop(s:timer)
     let s:timer = -1
   endif
-  let s:last = [bufnr('%'), line('.'), strpart(getline('.'), 0, col('.') - 1)]
+  let s:last = s:key()
   let s:accepted = [s:last[0], s:last[2]]
   if a:reason !=# 'cancel' && goda#is_running('cmp')
     call goda#notify('cmp', 'done', ref)
