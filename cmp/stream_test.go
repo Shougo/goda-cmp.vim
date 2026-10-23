@@ -346,11 +346,17 @@ func (s previewSource) Preview(_ context.Context, _ sdk.Host, a cmp.DoneArgs) (c
 	return cmp.Preview{Kind: cmp.PreviewText, Contents: []string{"one", "two"}}, nil
 }
 
-// hostFilter records the Host it was given.
-type hostFilter struct{ got *[]sdk.Host }
+// hostFilter records the Host it was given. The sources of a request are
+// filtered concurrently.
+type hostFilter struct {
+	mu  *sync.Mutex
+	got *[]sdk.Host
+}
 
 func (hostFilter) Name() string { return "hostfilter" }
 func (f hostFilter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	*f.got = append(*f.got, in.Host)
 	return in.Items, nil
 }
@@ -360,7 +366,7 @@ func TestPreview(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(previewSource{fakeSource{name: "p", items: []string{"alpha", "alps", "amber"}}})
 	b.AddSource(fakeSource{name: "plain", items: []string{"apple"}})
-	b.AddFilter(hostFilter{&hosts})
+	b.AddFilter(hostFilter{&sync.Mutex{}, &hosts})
 	b.PatchGlobal(cmp.Config{
 		Sources:       []string{"p", "plain"},
 		SourceOptions: map[string]cmp.SourceOption{"_": {Sorters: []string{"hostfilter"}}},
