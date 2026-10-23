@@ -534,6 +534,7 @@ function! s:context(manual, event) abort
         \ 'lnum': s:lnum(),
         \ 'col': s:col(),
         \ 'input': s:input(),
+        \ 'nextinput': goda_cmp#_next_input(),
         \ 'filetype': ft,
         \ 'mode': mode ==# '' ? 'i' : mode,
         \ 'cmdtype': mode ==# 'c' ? getcmdtype() : '',
@@ -721,9 +722,20 @@ function! goda_cmp#_shown() abort
   return s:items
 endfunction
 
-" The text before the cursor, for goda_cmp#map#*().
+" The text before the cursor, for goda_cmp#map#*() and the Vim script of
+" extensions.
 function! goda_cmp#_input() abort
   return s:input()
+endfunction
+
+" The text after the cursor.
+function! goda_cmp#_next_input() abort
+  return s:line()[strlen(s:input()) :]
+endfunction
+
+" The whole line: of the buffer, the command line or the terminal.
+function! goda_cmp#_line() abort
+  return s:line()
 endfunction
 
 function! goda_cmp#_col() abort

@@ -42,6 +42,9 @@ jobs:
         with:
           neovim: true
           version: stable
+      # For ext/source/shellnative.
+      - name: Install zsh
+        run: sudo apt-get install -y zsh
       # After the editors: installing them may put a directory with the
       # runner's own, older Go first in PATH.
       - uses: actions/setup-go@v7

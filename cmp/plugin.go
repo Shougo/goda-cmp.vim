@@ -46,6 +46,9 @@ type engine struct {
 	visible bool
 	last    *lastList
 	manual  *manualState
+	// shownUI is the UI that showed the last list. When DynamicUI picks
+	// another one, it is hidden first, as in ddc.vim.
+	shownUI UI
 }
 
 type lastList struct {
@@ -358,9 +361,19 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 			e.setLast(nil)
 			e.notifyItems(ctx, h, &c, 0, nil, nil)
 			hideUI(u)
+			e.hideShownUI(ctx, h, u)
 			return nil
 		}
 		shownItems = len(items)
+		e.mu.Lock()
+		prev := e.shownUI
+		e.shownUI = u
+		e.mu.Unlock()
+		if prev != nil && prev.Name() != u.Name() {
+			if err := prev.Hide(ctx, h); err != nil {
+				log.Printf("cmp: ui %s: hide: %v", prev.Name(), err)
+			}
+		}
 		items = e.remember(&c, cfg.timeout(), u, items, srcs, previews)
 		e.setLast(&lastList{c: &c, col: start + 1, items: items, cfg: cfg, al: al})
 		e.notifyItems(ctx, h, &c, start+1, items, cfg.Sources)
@@ -706,7 +719,22 @@ func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error
 	if err != nil {
 		return nil, err
 	}
+	e.hideShownUI(ctx, h, ui)
 	return nil, ui.Hide(ctx, h)
+}
+
+// hideShownUI hides the UI that showed the last list when it is not ui (a
+// UI DynamicUI chose), and forgets it.
+func (e *engine) hideShownUI(ctx context.Context, h sdk.Host, ui UI) {
+	e.mu.Lock()
+	prev := e.shownUI
+	e.shownUI = nil
+	e.mu.Unlock()
+	if prev != nil && prev.Name() != ui.Name() {
+		if err := prev.Hide(ctx, h); err != nil {
+			log.Printf("cmp: ui %s: hide: %v", prev.Name(), err)
+		}
+	}
 }
 
 func (e *engine) options(_ context.Context, _ sdk.Host, params []any) (any, error) {

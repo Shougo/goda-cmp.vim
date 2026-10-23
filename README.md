@@ -44,6 +44,9 @@ where the files and the binary live, rebuilding and updating, the
 configuration, run-time patches, selecting candidates, the popup, writing
 extensions and partial results.
 
+A configuration translated from a ddc.vim user's `ddc.ts`, with its Vim
+script, is in [examples/ddc](examples/ddc).
+
 ## How it fits together
 
 ```
@@ -53,9 +56,9 @@ extensions and partial results.
         ▼
  goda-cmp.vim/cmp                 engine and interfaces (no UI, no source)
  goda-cmp.vim/ext/...             bundled extensions: ui/native, ui/pum,
-                                  source/around, source/lsp,
-                                  source/cmdline, source/cmdlinehistory,
-                                  filter/...
+                                  ports of ddc.vim extensions:
+                                  source/around, source/lsp, source/file, ...
+                                  (`:help goda-cmp-bundled`)
  goda-cmp-source-*, goda-cmp-filter-*   extensions (Go modules, own repositories)
         │
         ▼  go build  →  one binary, started by goda.vim (Vim or Neovim)

@@ -41,7 +41,9 @@ function! DumpPopup() abort
   " In a terminal, the line of the terminal's cursor (Vim keeps it apart).
   let line = mode() ==# 't' && !has('nvim')
         \ ? term_getline('', term_getcursor(bufnr('%'))[0]) : getline('.')
+  let inline = exists('*goda_cmp#ui#inline#visible') && goda_cmp#ui#inline#visible()
   call writefile([json_encode({'visible': visible ? v:true : v:false, 'words': words, 'line': line,
+        \ 'inline': inline ? v:true : v:false,
         \ 'cmdline': mode() ==# 'c' ? getcmdline() : '', 'preview': preview})], $GODA_OUT, 'a')
   return ''
 endfunction
@@ -71,6 +73,17 @@ if !empty($GODA_FUNCS)
         \ 'contextFiletype': 'treesitter',
         \ })
   call goda_cmp#patch_filetype('lua', {'sourceOptions': {'around': {'mark': 'LUA'}}})
+endif
+
+" $GODA_PORTS: the ported extensions, as a ddc.vim user maps them.
+if !empty($GODA_PORTS)
+  inoremap <expr> <C-g> goda_cmp#map#insert_item(0)
+  cnoremap <expr> <C-g> goda_cmp#map#insert_item(0)
+  let @a = 'registerword_qq other'
+  call pum#set_option('auto_select', v:false)
+  " Terminal buffers: the shell's own completion.
+  execute 'autocmd' (has('nvim') ? 'TermOpen' : 'TerminalOpen') '*'
+        \ 'call goda_cmp#patch_buffer(#{specialBufferCompletion: v:true, sources: ["shellnative"]})'
 endif
 
 " $GODA_TERMINAL: completion in a terminal, with pum.vim.

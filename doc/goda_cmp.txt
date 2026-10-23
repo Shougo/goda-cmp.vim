@@ -13,6 +13,7 @@ Run-time patches	|goda-cmp-patch|
 Selecting candidates	|goda-cmp-select|
 Popup			|goda-cmp-popup|
 Extensions		|goda-cmp-extension|
+Bundled extensions	|goda-cmp-bundled|
 Command line		|goda-cmp-cmdline|
 Terminal		|goda-cmp-terminal|
 Preview			|goda-cmp-preview|
@@ -577,6 +578,94 @@ name says nothing about the kind: a filter is a matcher, a sorter or a
 converter by the list it is put in.
 
 ==============================================================================
+BUNDLED EXTENSIONS                                          *goda-cmp-bundled*
+
+These are in this repository, under `ext/`: ports of ddc.vim extensions,
+named as the originals without "_" ("matcher_head" is "matcherhead").  They
+will move to repositories of their own (goda-cmp-source-{name}, ...) for
+version 1.0.  Their parameters are the original's, as fields of `Params`
+with the original's names in JSON (|goda-cmp-params|); the package
+documentation of each (`go doc`) has the details.
+
+UIs~
+	native		Vim's popup menu (ddc-ui-native)
+	pum		pum.vim; insert mode, command line, terminal
+			(ddc-ui-pum)
+	inline		the first item as virtual text, for a single
+			candidate (ddc-ui-inline); see below
+	none		shows nothing (ddc-ui-none)
+
+Sources~
+	around		words around the cursor (ddc-source-around)
+	buffer		words of the buffers of the tab page, and of
+			others of the filetype (ddc-source-buffer)
+	file		file names from the current directory, the
+			buffer's, and their project roots (ddc-source-file)
+	register	register contents, or their words with
+			ExtractWords (ddc-source-register; registers of
+			several lines are offered by their words only)
+	line		whole lines around the cursor (ddc-source-line)
+	mocword		the next English word, by mocword
+			(ddc-source-mocword)
+	input		input() and the expression register
+			(ddc-source-input)
+	cmdline		the command line (ddc-source-cmdline)
+	cmdlinehistory	the command-line history
+			(ddc-source-cmdline_history)
+	shellnative	the completion of zsh, fish or xonsh, run in the
+			background (ddc-source-shell_native)
+	shell		":!" completion of Vim, for Windows
+			(ddc-source-shell)
+	shellhistory	commands of shell history files
+			(ddc-source-shell_history)
+	vim		Vim script (ddc-source-vim)
+	lsp		language servers; see |goda-cmp-lsp|
+
+Filters~
+	matcherhead	the head of the word is what is typed
+	matcherprefix	the first characters are what is typed
+			(ddc-filter-matcher_prefix)
+	matcherlength	longer than what is typed
+			(ddc-filter-matcher_length)
+	sorterrank	by match, length and distance from the cursor
+			(ddc-filter-sorter_rank)
+	sorterhead	the head of longer items first, for postFilters
+			(ddc-filter-sorter_head)
+	sorterlength	shorter first
+	sortertext	by Item.SortText (LSP sortText)
+	sortercmdlinehistory
+			found in the command-line history first
+	sortershellhistory
+			found in a shell history file first
+	converterremoveoverlap
+			removes what the text after the cursor already has
+			(ddc-filter-converter_remove_overlap)
+	convertertruncateabbr
+			shortens long labels
+
+Inline~
+The "inline" UI shows the first item after the cursor;
+`goda_cmp#ui#inline#visible()` tells whether it does, and
+|goda_cmp#map#insert_item()| inserts it.  With pum.vim for several items: >go
+
+	DynamicUI: func(_ context.Context, _ sdk.Host,
+	    a cmp.DynamicUIArgs) (string, error) {
+	    if a.Context.Mode != "t" && len(a.Items) == 1 {
+	        return "inline", nil
+	    }
+	    return "pum", nil
+	},
+< >vim
+	inoremap <expr> <Tab> goda_cmp#ui#inline#visible()
+	      \ ? goda_cmp#map#insert_item(0) : "\<Tab>"
+<
+When DynamicUI switches UIs, the one that showed the previous list is
+hidden.
+
+A configuration of all of these, translated from a ddc.vim user's, is in
+`examples/ddc` (Go, and its vimrc.vim).
+
+==============================================================================
 COMMAND LINE                                                *goda-cmp-cmdline*
 
 Completion on the command line works as in ddc.vim.  It is enabled for one
@@ -620,7 +709,8 @@ fires the |User| autocmd "GodaCmpCmdlineLeave": >go
 are the command-line types of |getcmdtype()| (":", "/", "?", "@" for
 |input()|, ...).  A type without sources is not completed; "=" (the
 expression register) never is.  Sources see `Context.Mode` "c",
-`Context.CmdType` and the command line before the cursor as `Input`.
+`Context.CmdType` and the command line before the cursor as `Input`
+(`NextInput` is the text after it, in all modes).
 
 The UI must be able to show candidates there (`cmp.ModesUI` with "c"): "pum" can,
 "native" cannot, since |complete()| works in insert mode only.  With

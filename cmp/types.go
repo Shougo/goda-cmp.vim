@@ -31,11 +31,13 @@ type Context struct {
 	Seq  int64 `json:"seq"`
 	Tick int64 `json:"tick"`
 
-	Bufnr    int    `json:"bufnr"`
-	Lnum     int    `json:"lnum"`
-	Col      int    `json:"col"`   // 1-based byte column of the cursor
-	Input    string `json:"input"` // the text of the line before the cursor
-	Filetype string `json:"filetype"`
+	Bufnr int    `json:"bufnr"`
+	Lnum  int    `json:"lnum"`
+	Col   int    `json:"col"`   // 1-based byte column of the cursor
+	Input string `json:"input"` // the text of the line before the cursor
+	// NextInput is the text of the line after the cursor.
+	NextInput string `json:"nextinput"`
+	Filetype  string `json:"filetype"`
 	// Manual is set when the user asked for completion explicitly;
 	// MinAutoCompleteLength is ignored then.
 	Manual bool `json:"manual"`

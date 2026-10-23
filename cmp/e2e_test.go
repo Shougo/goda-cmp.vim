@@ -21,6 +21,7 @@ type dump struct {
 	Error   string   `json:"error"`
 	Buffer  any      `json:"buffer"`
 	Preview string   `json:"preview"` // the 'buftype' of pum.vim's preview
+	Inline  bool     `json:"inline"`  // goda_cmp#ui#inline#visible()
 	Current *struct {
 		Mark    string `json:"mark"`
 		Visible bool   `json:"visible"`
@@ -587,8 +588,16 @@ func supportsPum(ed e2e.Editor) bool {
 // runDriver types steps into ed with the test vimrc and returns the records.
 func runDriver(t *testing.T, ed e2e.Editor, bin, repo, godaRoot, file, steps string, env ...string) []dump {
 	t.Helper()
+	return runDriverIn(t, "", ed, bin, repo, godaRoot, file, steps, env...)
+}
+
+// runDriverIn is runDriver with the editor started in the directory dir.
+func runDriverIn(t *testing.T, dir string, ed e2e.Editor, bin, repo, godaRoot, file, steps string, env ...string) []dump {
+	t.Helper()
 	out := filepath.Join(t.TempDir(), "out.jsonl")
-	cmd := exec.Command("python3", "-I", "testdata/drive.py", ed.Bin, "testdata/vimrc.vim", file, steps)
+	testdata, _ := filepath.Abs("testdata")
+	cmd := exec.Command("python3", "-I", filepath.Join(testdata, "drive.py"), ed.Bin, filepath.Join(testdata, "vimrc.vim"), file, steps)
+	cmd.Dir = dir
 	cmd.Env = append(append(os.Environ(),
 		"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
 		"GODA_NO_PATCH_MAPS=1"), env...)
@@ -732,4 +741,149 @@ func TestRealTerminal(t *testing.T) {
 			t.Errorf("after accepting: %+v", ds[2])
 		}
 	})
+}
+
+// TestRealPorts uses the ported extensions in a real editor, configured as a
+// ddc.vim user would: buffer, register (its words), file and input sources,
+// the matchers, sorters and converters of "_", pum.vim, and the inline UI for
+// a single candidate, inserted by goda_cmp#map#insert_item(0).
+func TestRealPorts(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	pumDir := os.Getenv("GODA_CMP_PUM")
+	if pumDir == "" {
+		t.Skip("GODA_CMP_PUM is not set")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/portcfg")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		if !supportsPum(ed) {
+			t.Skip("this editor is too old for pum.vim")
+		}
+		dir := t.TempDir()
+		for name, text := range map[string]string{
+			"t.txt":        "uniqueword_alpha\n\n",
+			"other.txt":    "otherbufword_zz\n",
+			"foo_file.txt": "",
+		} {
+			if err := os.WriteFile(filepath.Join(dir, name), []byte(text), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.Mkdir(filepath.Join(dir, "foo_dir"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		// Each single candidate is shown inline and inserted with Ctrl-G.
+		steps := `[
+		  [":split other.txt\r", 0.5], [":wincmd p\r", 0.5],
+		  ["2GA", 0.3], ["uniquew", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
+		  ["\u001bo", 0.3], ["otherbufw", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
+		  ["\u001bo", 0.3], ["registerw", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
+		  ["\u001bo", 0.3], ["./foo_", 1.5], ["\u001d", 0.3],
+		  ["\u001b", 0.5],
+		  [":call goda_cmp#enable_cmdline() | let g:r = input('> ', '', 'file')\r", 0.8],
+		  ["foo_f", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
+		  ["\u001b", 0.3],
+		  [":hide edit x.vim\r", 0.5], ["iset filety", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
+		  ["\u001b", 0.3]
+		]`
+		ds := runDriverIn(t, dir, ed, bin, repo, godaRoot, "t.txt", steps, "PUM_RTP="+pumDir, "GODA_PORTS=1")
+		if len(ds) < 9 {
+			t.Fatalf("got %d records, want 9", len(ds))
+		}
+		for i, word := range []string{"uniqueword_alpha", "otherbufword_zz", "registerword_qq"} {
+			shownInline, inserted := ds[2*i], ds[2*i+1]
+			if !shownInline.Inline {
+				t.Errorf("%s: not shown inline: %+v", word, shownInline)
+			}
+			if inserted.Line != word {
+				t.Errorf("%s: after Ctrl-G: %+v", word, inserted)
+			}
+		}
+		if d := ds[6]; !d.Visible || !slices.Contains(d.Words, "foo_file.txt") || !slices.Contains(d.Words, "foo_dir") {
+			t.Errorf(`"./foo_": %+v`, d)
+		}
+		if d := ds[7]; !d.Inline || d.Cmdline != "foo_f" {
+			t.Errorf(`input() "foo_f": %+v`, d)
+		}
+		if d := ds[8]; d.Cmdline != "foo_file.txt" {
+			t.Errorf("input() after Ctrl-G: %+v", d)
+		}
+		// Vim script: the option.
+		if len(ds) < 11 {
+			t.Fatalf("got %d records, want 11", len(ds))
+		}
+		if d := ds[9]; !d.Inline && !slices.Contains(d.Words, "filetype") {
+			t.Errorf(`"set filety": %+v`, d)
+		}
+		if d := ds[10]; d.Line != "set filetype" {
+			t.Errorf(`"set filety" after Ctrl-G: %+v`, d)
+		}
+	})
+}
+
+// TestRealShellNative completes in a terminal with zsh's own completion
+// (ext/source/shellnative).
+func TestRealShellNative(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	if _, err := exec.LookPath("zsh"); err != nil {
+		t.Skip("zsh is not installed")
+	}
+	pumDir := os.Getenv("GODA_CMP_PUM")
+	if pumDir == "" {
+		t.Skip("GODA_CMP_PUM is not set")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/portcfg")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		if !supportsPum(ed) {
+			t.Skip("this editor is too old for pum.vim")
+		}
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "t.txt"), []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// The first answer of zsh may be slower than hideTimeout: a second
+		// keystroke asks again.
+		steps := `[
+		  [":GodaTerm\r", 2.0], ["printf ok; ec", 2.5], ["h", 1.5], ["\u001d", 0.3],
+		  ["\u001c\u000e", 0.3]
+		]`
+		ds := runDriverIn(t, dir, ed, bin, repo, godaRoot, "t.txt", steps,
+			"PUM_RTP="+pumDir, "GODA_PORTS=1", "GODA_TERMINAL=1", "PS1=$ ", "ENV=")
+		if len(ds) < 1 {
+			t.Fatal("nothing recorded")
+		}
+		if !ds[0].Visible || !slices.Contains(ds[0].Words, "echo") {
+			t.Errorf(`"ech": %+v`, ds[0])
+		}
+	})
+}
+
+// TestExampleDDC builds examples/ddc (a translation of a ddc.vim user's
+// configuration) and asks the binary whether its configuration is valid.
+func TestExampleDDC(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary")
+	}
+	bin, _, _ := buildConfig(t, "../examples/ddc")
+	cmd := exec.Command(bin, "--transport=jsonl")
+	cmd.Stdin = strings.NewReader(`{"id":1,"method":"cmp.status","params":[]}` + "\n")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	var res struct {
+		Result string `json:"result"`
+	}
+	if err := json.Unmarshal(out, &res); err != nil || res.Result != "" {
+		t.Errorf("status: %s (%v)", out, err)
+	}
 }
