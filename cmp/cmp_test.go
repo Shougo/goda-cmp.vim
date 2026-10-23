@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -308,7 +309,9 @@ func TestUIChoice(t *testing.T) {
 	complete(t, b, h, ctxMap(1, "x", ""))
 	var got []string
 	for _, c := range h.Calls() {
-		got = append(got, c.Fn)
+		if c.Fn != "goda_cmp#_items" { // the core's own record of the list
+			got = append(got, c.Fn)
+		}
 	}
 	// The UI is asked first whether the change was its own.
 	if !reflect.DeepEqual(got, []string{"goda_cmp#ui#pum#skip", "goda_cmp#ui#pum#show"}) {
@@ -384,9 +387,10 @@ func TestUpdateInfo(t *testing.T) {
 	if got["ref"] != "1:0" || got["info"] != "resolved xyz" {
 		t.Errorf("update_info got %v", got)
 	}
+	// The receivers are for the Vim script of UIs, not for the engine.
 	for _, c := range h.Calls() {
-		if strings.HasPrefix(c.Fn, "goda_cmp#_") {
-			t.Errorf("the engine called the core's Vim script: %s", c.Fn)
+		if slices.Contains([]string{"goda_cmp#_fresh", "goda_cmp#_select", "goda_cmp#_done"}, c.Fn) {
+			t.Errorf("the engine called a receiver: %s", c.Fn)
 		}
 	}
 }
@@ -598,7 +602,7 @@ func TestCmdlineSources(t *testing.T) {
 	}
 }
 
-func TestCmdlineNeedsCmdlineUI(t *testing.T) {
+func TestCmdlineNeedsModesUI(t *testing.T) {
 	b := newBuilder() // UI "native", which cannot show on the command line
 	b.AddSource(fakeSource{name: "cmd"})
 	b.PatchGlobal(cmp.Config{CmdlineSources: map[string][]string{":": {"cmd"}}})
@@ -612,5 +616,31 @@ func TestCmdlineNeedsCmdlineUI(t *testing.T) {
 	b.PatchGlobal(cmp.Config{CmdlineSources: map[string][]string{"/": {"nope"}}})
 	if err := b.Validate(); err == nil || !strings.Contains(err.Error(), `unknown source "nope" in cmdlineSources["/"]`) {
 		t.Errorf("unknown source: err = %v", err)
+	}
+}
+
+// ModesUI: a UI without it shows in insert mode only, one with it in the
+// modes it lists.
+func TestModesUI(t *testing.T) {
+	for _, tc := range []struct {
+		ui, mode string
+		ok       bool
+	}{
+		{"native", "i", true},
+		{"native", "t", false},
+		{"pum", "c", true},
+		{"pum", "t", true},
+	} {
+		b := newBuilder()
+		b.AddSource(fakeSource{name: "a", items: []string{"x"}})
+		b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: tc.ui})
+		h := uiHost()
+		h.Funcs["goda_cmp#ui#pum#show"] = func(...any) (any, error) { return nil, nil }
+		c := ctxMap(1, "x", "")
+		c["mode"] = tc.mode
+		err := completeErr(t, b, h, c)
+		if tc.ok != (err == nil) {
+			t.Errorf("%s in mode %q: err = %v", tc.ui, tc.mode, err)
+		}
 	}
 }

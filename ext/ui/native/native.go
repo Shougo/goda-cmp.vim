@@ -9,20 +9,44 @@ import (
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-type ui struct{}
+// Params are the parameters of the UI, as ddc-ui-native's.
+type Params struct {
+	// Insert inserts the first item when the popup opens, which suits
+	// manual completion.
+	Insert bool `json:"insert"`
+}
 
-// New returns the UI, named "native".
-func New() cmp.UI { return ui{} }
+type ui struct{ p Params }
+
+// New returns the UI, named "native". The parameters may be given (at most
+// one Params).
+func New(p ...Params) cmp.UI {
+	var u ui
+	if len(p) > 0 {
+		u.p = p[0]
+	}
+	return u
+}
 
 func (ui) Name() string { return "native" }
 
-func (ui) Show(ctx context.Context, h sdk.Host, r cmp.ShowRequest) error {
+// WithParams sets the parameters from Vim script (uiParams).
+func (u ui) WithParams(p cmp.Params) (any, error) {
+	np, err := cmp.PatchParams(u.p, p)
+	if err != nil {
+		return nil, err
+	}
+	return ui{np}, nil
+}
+
+func (u ui) Show(ctx context.Context, h sdk.Host, r cmp.ShowRequest) error {
 	_, err := h.Call(ctx, "goda_cmp#ui#native#show", map[string]any{
-		"seq":   r.Context.Seq,
-		"tick":  r.Context.Tick,
-		"mode":  r.Context.Mode,
-		"col":   r.Col,
-		"items": r.Items,
+		"insert": u.p.Insert,
+		"seq":    r.Context.Seq,
+		"tick":   r.Context.Tick,
+		"mode":   r.Context.Mode,
+		"col":    r.Col,
+		"items":  r.Items,
 		// false while sources are still answering (see cmp.StreamSource)
 		"final": r.Final,
 	})
@@ -58,7 +82,30 @@ func (ui) UpdateInfo(ctx context.Context, h sdk.Host, it cmp.Item) error {
 	return err
 }
 
+// Visible: Vim's pumvisible().
+func (ui) Visible(ctx context.Context, h sdk.Host) (bool, error) {
+	v, err := h.Call(ctx, "pumvisible")
+	if err != nil {
+		return false, err
+	}
+	switch n := v.(type) {
+	case int64:
+		return n != 0, nil
+	case uint64:
+		return n != 0, nil
+	case int8:
+		return n != 0, nil
+	case int:
+		return n != 0, nil
+	case bool:
+		return n, nil
+	}
+	return false, nil
+}
+
 var (
-	_ cmp.Skipper     = ui{}
-	_ cmp.InfoUpdater = ui{}
+	_ cmp.Skipper      = ui{}
+	_ cmp.InfoUpdater  = ui{}
+	_ cmp.Visibler     = ui{}
+	_ cmp.Configurable = ui{}
 )

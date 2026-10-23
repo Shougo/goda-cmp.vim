@@ -12,9 +12,10 @@ import (
 
 // Params are the settings of the filter. The zero value ignores case, except
 // that a typed capital letter makes the match case sensitive (smartcase).
+// The source option ignoreCase ignores case completely.
 type Params struct {
 	// CaseSensitive turns the case folding off completely.
-	CaseSensitive bool
+	CaseSensitive bool `json:"caseSensitive"`
 }
 
 type filter struct{ p Params }
@@ -24,9 +25,18 @@ func New(p Params) cmp.Filter { return filter{p} }
 
 func (filter) Name() string { return "matcherhead" }
 
+// WithParams sets the parameters from Vim script (filterParams).
+func (f filter) WithParams(p cmp.Params) (any, error) {
+	np, err := cmp.PatchParams(f.p, p)
+	if err != nil {
+		return nil, err
+	}
+	return New(np), nil
+}
+
 func (f filter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
 	typed := in.Complete
-	fold := !f.p.CaseSensitive && !strings.ContainsFunc(typed, unicode.IsUpper)
+	fold := in.IgnoreCase || (!f.p.CaseSensitive && !strings.ContainsFunc(typed, unicode.IsUpper))
 	if fold {
 		typed = strings.ToLower(typed)
 	}

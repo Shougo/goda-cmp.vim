@@ -34,13 +34,14 @@ function! s:on_select(item) abort
   call goda_cmp#_select(a:item)
 endfunction
 
-function! s:set_completeopt() abort
+" INSERT (the "insert" param): insert the first item.
+function! s:set_completeopt(insert) abort
   if s:saved_completeopt is v:null
     let s:saved_completeopt = &completeopt
   endif
   let keep = filter(split(s:saved_completeopt, ','),
         \ {_, v -> index(['longest', 'noinsert', 'noselect', 'menuone'], v) < 0})
-  let &completeopt = join(keep + ['menuone', 'noinsert', 'noselect'], ',')
+  let &completeopt = join(keep + (a:insert ? ['menuone'] : ['menuone', 'noinsert', 'noselect']), ',')
 endfunction
 
 function! s:restore_completeopt() abort
@@ -60,7 +61,7 @@ function! goda_cmp#ui#native#show(r) abort
   if !a:r.final && get(complete_info(['selected']), 'selected', -1) >= 0
     return 0
   endif
-  call s:set_completeopt()
+  call s:set_completeopt(get(a:r, 'insert', v:false))
   call complete(a:r.col, a:r.items)
   return 1
 endfunction

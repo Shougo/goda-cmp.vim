@@ -5,7 +5,7 @@ A successor in spirit to ddc.vim: sources and filters are separate extensions,
 the popup is either Vim's native one or [pum.vim](https://github.com/Shougo/pum.vim),
 and the configuration is code — a small Go program you own.
 
-Status: early. See "Not implemented yet".
+Status: early. See "Not implemented".
 
 ## Try it
 
@@ -79,12 +79,16 @@ installed. CI (`.github/workflows/ci.yml`) installs all of them. They build
 against goda.vim as a sibling directory (`../goda.vim`), and are skipped
 without it.
 
-## Not implemented yet
+## Not implemented
 
-Compared with ddc.vim: `sourceParams` set from Vim script (parameters are Go
-values given to the constructor), and `ignoreCase` options. Command-line
-completion is there (`:help goda-cmp-cmdline`); previews need a pum.vim with
-its `previewer` option (`:help goda-cmp-preview`).
+Compared with ddc.vim: `ddc#callback()`, `ddc#register()` and
+`ddc#custom#load_config()` (extensions are Go packages linked into the binary),
+`matcherConcurrency` and the filter option `parallelSafe` (filters run as Go
+code), `uiOptions` and `filterOptions` (ddc.vim defines none), and
+`ddc#custom#set_context_*()` from Vim script (`Config.DynamicConfig` in Go
+does it). Command-line and terminal completion are there
+(`:help goda-cmp-cmdline`, `:help goda-cmp-terminal`); previews need a pum.vim
+with its `previewer` option (`:help goda-cmp-preview`).
 
 ## License
 

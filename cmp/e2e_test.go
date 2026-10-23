@@ -21,6 +21,10 @@ type dump struct {
 	Error   string   `json:"error"`
 	Buffer  any      `json:"buffer"`
 	Preview string   `json:"preview"` // the 'buftype' of pum.vim's preview
+	Current *struct {
+		Mark    string `json:"mark"`
+		Visible bool   `json:"visible"`
+	} `json:"current"` // DumpCurrent()
 }
 
 // TestRealEditor types into an actual Vim (in a pseudo terminal) with a binary
@@ -578,4 +582,154 @@ func supportsPum(ed e2e.Editor) bool {
 	}
 	defer os.Remove(script)
 	return exec.Command(ed.Bin, ed.Headless(script)...).Run() == nil
+}
+
+// runDriver types steps into ed with the test vimrc and returns the records.
+func runDriver(t *testing.T, ed e2e.Editor, bin, repo, godaRoot, file, steps string, env ...string) []dump {
+	t.Helper()
+	out := filepath.Join(t.TempDir(), "out.jsonl")
+	cmd := exec.Command("python3", "-I", "testdata/drive.py", ed.Bin, "testdata/vimrc.vim", file, steps)
+	cmd.Env = append(append(os.Environ(),
+		"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
+		"GODA_NO_PATCH_MAPS=1"), env...)
+	if b, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("driver: %v\n%s", err, b)
+	}
+	raw, err := os.ReadFile(out)
+	if err != nil {
+		t.Fatalf("nothing recorded: %v", err)
+	}
+	var ds []dump
+	for l := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
+		var d dump
+		if err := json.Unmarshal([]byte(l), &d); err != nil {
+			t.Fatalf("bad record %q: %v", l, err)
+		}
+		ds = append(ds, d)
+	}
+	for i, d := range ds {
+		if d.Current != nil {
+			t.Logf("record %d: %+v current %+v", i, d, *d.Current)
+		} else {
+			t.Logf("record %d: %+v", i, d)
+		}
+	}
+	return ds
+}
+
+// TestRealFunctions: goda_cmp#map#insert_item() and
+// goda_cmp#map#complete_common_string(), an alias with params of its own set
+// from Vim script, goda_cmp#get_current() and goda_cmp#visible(), and
+// contextFiletype "treesitter" (Neovim) in a real editor.
+func TestRealFunctions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/funcscfg")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		file := filepath.Join(t.TempDir(), "t.md")
+		text := "alphabet_long_word alpha alphabet\n\n```lua\nlocal x = 1\n```\n"
+		if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// 1. On the empty line 2, "alp": around and around2 (which takes
+		//    words of 9 characters or more, and keeps duplicates).
+		// 2. Ctrl-X 2: the common prefix, "alpha".
+		// 3. Ctrl-X 1: the first item.
+		// 4. Ctrl-X 3 on line 2 and in the lua block: the configuration.
+		steps := `[
+		  ["2GA", 0.3], ["alp", 1.5], ["\u001d", 0.3], ["\u00183", 0.3],
+		  ["\u00182", 1.5], ["\u001d", 0.3],
+		  ["\u00181", 1.0], ["\u001d", 0.3],
+		  ["\u001b", 0.3],
+		  ["2GA\u00183", 0.5], ["\u001b", 0.3],
+		  ["4GA\u00183", 0.5], ["\u001b", 0.3]
+		]`
+		ds := runDriver(t, ed, bin, repo, godaRoot, file, steps, "PUM_RTP=", "GODA_FUNCS=1")
+		if len(ds) < 6 {
+			t.Fatalf("got %d records, want 6", len(ds))
+		}
+		n := 0
+		for _, w := range ds[0].Words {
+			if w == "alphabet_long_word" {
+				n++
+			}
+		}
+		if !ds[0].Visible || n != 2 || !slices.Contains(ds[0].Words, "alpha") {
+			t.Errorf(`"alp": %+v`, ds[0])
+		}
+		if ds[1].Current == nil || !ds[1].Current.Visible {
+			t.Errorf("goda_cmp#visible() with the popup open: %+v", ds[1])
+		}
+		if ds[2].Line != "alpha" {
+			t.Errorf("complete_common_string: %+v", ds[2])
+		}
+		if ds[3].Line != "alphabet_long_word" {
+			t.Errorf("insert_item(0): %+v", ds[3])
+		}
+		if ds[4].Current == nil || ds[4].Current.Mark != "" {
+			t.Errorf("markdown: %+v", ds[4])
+		}
+		want := ""
+		if ed.Name == "nvim" {
+			want = "LUA" // the lua block, by tree-sitter
+		}
+		if ds[5].Current == nil || ds[5].Current.Mark != want {
+			t.Errorf("in the lua block: %+v, want mark %q", ds[5], want)
+		}
+	})
+}
+
+// TestRealTerminal completes in a terminal buffer with pum.vim: words the
+// shell printed, and accepting one sends it to the shell.
+func TestRealTerminal(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Skip("python3 is needed to drive the pty")
+	}
+	pumDir := os.Getenv("GODA_CMP_PUM")
+	if pumDir == "" {
+		t.Skip("GODA_CMP_PUM is not set")
+	}
+	bin, repo, godaRoot := buildConfig(t, "testdata/termcfg")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		if !supportsPum(ed) {
+			t.Skip("this editor is too old for pum.vim")
+		}
+		script := filepath.Join(t.TempDir(), "check.vim")
+		if err := os.WriteFile(script, []byte("if exists('##TextChangedT')\n  qa!\nendif\ncq!\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if exec.Command(ed.Bin, ed.Headless(script)...).Run() != nil {
+			t.Skip("this editor has no TextChangedT")
+		}
+		file := filepath.Join(t.TempDir(), "t.txt")
+		if err := os.WriteFile(file, []byte("x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// Print a word, then type its start; Ctrl-N selects the item, Ctrl-Y
+		// sends it to the shell, which pum.vim does with Ctrl-H for the
+		// typed part (hence stty erase).
+		steps := `[
+		  [":GodaTerm\r", 2.0], ["stty erase '^H'\r", 0.5], ["echo zebra_unique_word\r", 1.0],
+		  ["echo zeb", 1.5], ["\u001d", 0.3],
+		  ["\u000e", 0.8], ["\u001d", 0.3], ["\u0019", 0.8], ["\u001d", 0.3],
+		  ["\u001c\u000e", 0.3]
+		]`
+		ds := runDriver(t, ed, bin, repo, godaRoot, file, steps, "PUM_RTP="+pumDir, "GODA_TERMINAL=1", "PS1=$ ", "ENV=")
+		if len(ds) < 3 {
+			t.Fatalf("got %d records, want 3", len(ds))
+		}
+		if !ds[0].Visible || !slices.Contains(ds[0].Words, "zebra_unique_word") {
+			t.Errorf(`"echo zeb": %+v`, ds[0])
+		}
+		if !strings.HasSuffix(strings.TrimRight(ds[2].Line, " "), "echo zebra_unique_word") || ds[2].Visible {
+			t.Errorf("after accepting: %+v", ds[2])
+		}
+	})
 }

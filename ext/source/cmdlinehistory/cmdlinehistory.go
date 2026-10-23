@@ -34,7 +34,7 @@ import (
 type Params struct {
 	// Limit is how many entries, from the newest, are looked at. Default
 	// 1000.
-	Limit int
+	Limit int `json:"limit"`
 }
 
 type source struct{ limit int }
@@ -48,6 +48,15 @@ func New(p Params) cmp.Source {
 }
 
 func (source) Name() string { return "cmdlinehistory" }
+
+// WithParams sets the parameters from Vim script (sourceParams).
+func (s source) WithParams(p cmp.Params) (any, error) {
+	np, err := cmp.PatchParams(Params{Limit: s.limit}, p)
+	if err != nil {
+		return nil, err
+	}
+	return New(np), nil
+}
 
 func (s source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathered, error) {
 	if c.Mode != "c" {

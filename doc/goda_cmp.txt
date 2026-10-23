@@ -14,6 +14,7 @@ Selecting candidates	|goda-cmp-select|
 Popup			|goda-cmp-popup|
 Extensions		|goda-cmp-extension|
 Command line		|goda-cmp-cmdline|
+Terminal		|goda-cmp-terminal|
 Preview			|goda-cmp-preview|
 Partial results		|goda-cmp-partial|
 Language servers	|goda-cmp-lsp|
@@ -97,12 +98,72 @@ goda_cmp#disable()
 		Stop completing and stop the binary.
 
                                                          *goda_cmp#complete()*
-goda_cmp#complete()
-		Complete now, whatever the length of the typed word.
+goda_cmp#complete([{options}])
+		Complete now (ddc.vim's "Manual" event): every source is
+		asked, and the automatic lengths do not apply (the manual
+		ones do).  {options} is a patch for this request only, as
+		|goda_cmp#patch_global()| takes.  While the list is open,
+		typing on narrows it as a manual completion with the same
+		sources and UI, as in ddc.vim.
 
                                                              *goda_cmp#hide()*
-goda_cmp#hide()
-		Close the popup.
+goda_cmp#hide([{event}])
+		Close the popup.  {event} is for compatibility with
+		ddc#hide().
+
+                                                          *goda_cmp#visible()*
+goda_cmp#visible()
+		Whether the popup is open: the UI is asked when it can tell
+		(cmp.Visibler).
+
+                                               *goda_cmp#skip_next_complete()*
+goda_cmp#skip_next_complete()
+		Skip the next automatic completion.
+
+                                                         *goda_cmp#on_event()*
+goda_cmp#on_event({event})
+		Act as if the autocmd {event} happened: the sources that
+		listen to it hear about it, and it completes when it is in
+		autoCompleteEvents.
+
+                                                 *goda_cmp#on_complete_done()*
+goda_cmp#on_complete_done({item})
+		For a UI that is not goda-cmp's: the user accepted {item}, a
+		complete-item that came from goda-cmp.
+
+                                                     *goda_cmp#update_items()*
+goda_cmp#update_items({name}, {items})
+		Replace the items the source {name} gathered for the word
+		being typed with {items} (complete-items) and show the list
+		again, as ddc#update_items().  Nothing happens when the
+		source has not gathered for this word.
+
+                                                      *goda_cmp#get_current()*
+goda_cmp#get_current()
+		The configuration in effect for the current buffer: the Go
+		and Vim script settings together.
+
+                                                            *goda_cmp#alias()*
+goda_cmp#alias({type}, {alias}, {base})
+		Name the extension {base} of {type} ("source", "filter" or
+		"ui") also {alias}, as ddc#custom#alias().  The alias can
+		have options and params of its own: >vim
+
+	call goda_cmp#alias('source', 'around_long', 'around')
+	call goda_cmp#patch_global(#{
+	      \   sources: ['around', 'around_long'],
+	      \   sourceParams: #{ around_long: #{ minLength: 10 } },
+	      \   sourceOptions: #{ around_long: #{ mark: 'A+' } },
+	      \ })
+<
+                                                 *goda_cmp#enable_terminal()*
+goda_cmp#enable_terminal()
+		Complete in terminal buffers too; see |goda-cmp-terminal|.
+		Enables goda-cmp first if needed.
+
+                                                *goda_cmp#disable_terminal()*
+goda_cmp#disable_terminal()
+		Stop completing in terminal buffers.
 
                                                     *goda_cmp#get_previewer()*
 goda_cmp#get_previewer({item})
@@ -127,6 +188,7 @@ goda_cmp#patch_global({patch})
 goda_cmp#patch_filetype({filetype}, {patch})
 goda_cmp#patch_buffer({patch})
 		Merge {patch} into the settings; see |goda-cmp-patch|.
+		{filetype} may be a list of filetypes.
 
                                                        *goda_cmp#get_global()*
 goda_cmp#get_global()
@@ -139,6 +201,60 @@ goda_cmp#set_global({config})
 goda_cmp#set_filetype({filetype}, {config})
 goda_cmp#set_buffer({config})
 		Replace the patches made from Vim script.
+
+------------------------------------------------------------------------------
+MAPPINGS                                               *goda-cmp-map-functions*
+
+As ddc#map#*().  The functions that return keys are for <expr> mappings.
+
+                                                     *goda_cmp#map#complete()*
+goda_cmp#map#complete({ui})
+		Show the list shown last again, with the UI {ui}.
+
+                                              *goda_cmp#map#manual_complete()*
+goda_cmp#map#manual_complete([{options}])
+		|goda_cmp#complete()|.
+
+                                                 *goda_cmp#map#can_complete()*
+goda_cmp#map#can_complete()
+		Whether there is a list to complete from.
+
+                                                       *goda_cmp#map#extend()*
+goda_cmp#map#extend({confirm-key})
+		Accept with {confirm-key} and complete again with the same
+		sources. >vim
+	inoremap <expr> <C-l> goda_cmp#map#extend("\<C-y>")
+<
+                                       *goda_cmp#map#complete_common_string()*
+goda_cmp#map#complete_common_string()
+		Insert the longest common prefix of the items (ignoring
+		case).
+
+                                                  *goda_cmp#map#insert_item()*
+goda_cmp#map#insert_item({index})
+		Insert the item at {index} (from 0) and tell its source, as
+		accepting it does. >vim
+	inoremap <expr> <C-x>1 goda_cmp#map#insert_item(0)
+<
+------------------------------------------------------------------------------
+SYNTAX                                              *goda-cmp-syntax-functions*
+
+For enabledIf and for Config.DynamicConfig (through h.Call), as
+ddc#syntax#*().
+
+                                                       *goda_cmp#syntax#get()*
+goda_cmp#syntax#get()
+		The syntax groups at the cursor; in a buffer without
+		'syntax', Neovim's tree-sitter captures.
+
+                                                        *goda_cmp#syntax#in()*
+goda_cmp#syntax#in({groups})
+		Whether the cursor is in one of {groups} (a name or a list).
+
+                                                      *goda_cmp#syntax#lang()*
+goda_cmp#syntax#lang()
+		The language at the cursor by Neovim's tree-sitter, else
+		'filetype'.
 
 ==============================================================================
 VARIABLES                                                 *goda-cmp-variables*
@@ -182,21 +298,46 @@ source.  A name used but never added is reported when the binary starts.
 Nothing is built in: even the popup is an extension, and `UI` must name one
 that was added (there is no default).
 
-Settings:
+Settings are those of ddc.vim, with the same names in Vim script
+(`sourceOptions`, `autoCompleteEvents`, ...).  Where goda-cmp differs, it says
+so below.
 	UI			a UI added with AddUI ("native", "pum")
 	Sources			enabled sources, in order
-	SourceOptions		per source, "_" for all: Mark,
-                                MinAutoCompleteLength, MaxItems,
-                                KeywordPattern, ForceCompletionPattern,
-                                Matchers, Sorters, Converters
+	SourceOptions		per source, "_" for all; see
+				|goda-cmp-source-options|
 	CmdlineSources		sources of the command line, by
 				|getcmdtype()|; see |goda-cmp-cmdline|
 	PostFilters		filters run on the merged list
-	AutoComplete		completion while typing (default on)
+	SourceParams		parameters of sources, by name, set from Vim
+	FilterParams		script; see |goda-cmp-params|
+	UIParams
+	AutoComplete		completion while typing (default on; goda-cmp
+				only)
 	AutoCompleteDelay	debounce in ms (default 0)
+	AutoCompleteEvents	the autocmd events that complete (default
+				InsertEnter, TextChangedI, TextChangedP,
+				CmdlineEnter, CmdlineChanged, TextChangedT;
+				ddc.vim's default has the first three, but the
+				others happen only after
+				|goda_cmp#enable_cmdline()| and
+				|goda_cmp#enable_terminal()|)
+	BackspaceCompletion	complete after a backspace too (default off:
+				the popup is closed instead)
+	HideOnEvents		close the popup before completing (default
+				off)
+	SpecialBufferCompletion	complete where 'buftype' is not empty
+				(default off; the command line always is)
+	ContextFiletype		where the filetype of a request comes from:
+				"none" (default, 'filetype'),
+				"context_filetype" (context_filetype.vim) or
+				"treesitter" (Neovim's parser at the cursor).
+				It decides which filetype settings apply, so
+				it can be set globally or for a buffer only.
+				It is ddc#enable()'s context_filetype.
 	PartialInterval		least ms between popup updates while a
 				|goda-cmp-partial| source answers (default 50)
 	SourceTimeout		bound for every source and filter in ms
+				(default 2000)
 
 Where zero is a real value the field is a pointer, so that "not set" (nil)
 differs from 0 or false: write `new(0)` (Go 1.26).  A configuration written
@@ -207,7 +348,67 @@ ForceCompletionPattern is one too, matched the same way: when it matches,
 MinAutoCompleteLength is ignored for that source, as in ddc.vim.  `\.\w*`
 completes members right after the dot.
 
-`DynamicSources` and `DynamicUI` are functions and can only be set in Go.
+`DynamicConfig`, `DynamicSources`, `DynamicUI` and the source option
+`DynamicFilters` are functions and can only be set in Go.  `DynamicConfig`
+returns a patch for one request, laid over everything else; it takes the place
+of ddc#custom#set_context_*(): >go
+
+	DynamicConfig: func(ctx context.Context, h sdk.Host,
+	    a cmp.DynamicConfigArgs) (cmp.Config, error) {
+	    in, err := h.Call(ctx, "goda_cmp#syntax#in", "Comment")
+	    if err != nil || in != true {
+	        return cmp.Config{}, err
+	    }
+	    return cmp.Config{Sources: []string{"around"}}, nil
+	},
+<
+                                                     *goda-cmp-source-options*
+Source options (`SourceOptions`, ddc.vim's ddc-source-options):
+	Mark			shown in the menu column
+	MinAutoCompleteLength	shorter words do not complete automatically
+				(default 1; ddc.vim: 2)
+	MaxAutoCompleteLength	nor longer ones (default 80)
+	MinManualCompleteLength	the same for |goda_cmp#complete()|
+	MaxManualCompleteLength	(default 0 and 80)
+	MinKeywordLength	items with shorter words are dropped
+	MaxKeywordLength	and with longer ones (default 0: no limit)
+	MaxItems		items kept after sorting (default 100)
+	KeywordPattern		the text completed, before the cursor
+	ForceCompletionPattern	when it matches, the lengths do not apply
+	IgnoreCase		for the matchers (`FilterInput.IgnoreCase`)
+	MatcherKey		the item attribute the matchers compare:
+				"abbr", "menu", "kind" or "info"
+	Dup			an item whose word is there already: "ignore"
+				(default) drops it, "keep" keeps both,
+				"force" drops the earlier one
+	EnabledIf		a Vim expression; the source is used only when
+				it is true
+	Timeout			bound for the source in ms (default
+				SourceTimeout)
+	HideTimeout		when the source has not answered after this
+				many ms, the popup is hidden (default 200); a
+				plain source is then left out of the request
+				(as in ddc.vim), a StreamSource goes on
+	IsVolatile		ask the source on every keystroke instead of
+	VolatilePattern		filtering what it gathered again; with the
+				pattern, only when it matches
+	CacheTimeout		keep what the source gathered this many
+				seconds, even when the word goes out of the
+				lengths (default 0)
+	ReplaceSourceInputPattern
+				the first match is removed from the text the
+				source sees
+	Preview			false turns the source's previewer off
+	Matchers, Sorters, Converters
+				the filters, in order: matchers, sorters,
+				MaxItems, converters
+
+What a source gathered is kept and filtered again while the word is typed on
+(the same line and start), as in ddc.vim: the source is not asked again.
+So a source with a fixed list needs matchers.  A source whose answer depends
+on everything typed says so with `Gathered.Incomplete` (ext/source/lsp and
+ext/source/cmdline do), or is made volatile with IsVolatile.
+|goda_cmp#complete()| always asks.
 
 ==============================================================================
 RUN-TIME PATCHES                                              *goda-cmp-patch*
@@ -226,8 +427,21 @@ A patch is a dictionary with the keys of `cmp.Config`.  Settings apply in this
 order, the later one winning: global (Go, then Vim script), filetype (Go,
 then Vim script), buffer.  They are kept in Vim script: they survive a
 restart of the binary and go away with the buffer.  An invalid patch (unknown
-key, wrong type, unknown name) is refused with an error.  `sourceParams`
-cannot be patched from Vim script.
+key, wrong type, unknown name) is refused with an error.
+
+                                                             *goda-cmp-params*
+`sourceParams`, `filterParams` and `uiParams` set the parameters of
+extensions by name, over those given to the constructor in Go: >vim
+
+	call goda_cmp#patch_global(#{
+	      \   sourceParams: #{ around: #{ minLength: 3 } },
+	      \   uiParams: #{ pum: #{ insert: v:true } },
+	      \ })
+<
+The keys are the JSON names of the extension's Params.  The extension must
+implement `cmp.Configurable` (all those of this repository do but
+ext/source/lsp, whose settings are Go values); an unknown key is an error.
+The parameters of a name are merged by key across the settings.
 
 ==============================================================================
 SELECTING CANDIDATES                                         *goda-cmp-select*
@@ -265,6 +479,11 @@ pum.vim is configured in Vim script as usual (`pum#set_option()`,
 `pum#map#...`).  The UI can differ per filetype, and can be switched from Vim
 script among the UIs that were added: `goda_cmp#patch_global({'ui': 'pum'})`.
 
+Both take the parameter `insert` (as ddc-ui-native and ddc-ui-pum): the first
+item is inserted when the popup opens, which suits manual completion.  In Go,
+`pum.New(pum.Params{Insert: true})`; from Vim script, `uiParams`
+(|goda-cmp-params|).
+
 `Resolve` (|goda-cmp-extension|) shows its result through
 `pum#update_current_item()` with pum.vim, and in the native popup only when
 'completeopt' has "popup" and the item already had an info.
@@ -288,6 +507,9 @@ working:
 	EventHandler	Events, OnEvent: act on buffer events
 	Previewer	Preview: what to show in a preview window
 			(|goda-cmp-preview|)
+	Configurable	WithParams: take parameters from Vim script
+			(|goda-cmp-params|); `cmp.PatchParams` does the
+			work for a Params struct with JSON tags
 
 `Item` also has FilterText and SortText (LSP filterText and sortText), Dup,
 and UserData, which stays in the plugin process and comes back in
@@ -310,6 +532,11 @@ A UI may implement more, too:
 			(inserting the selected item) from typing; the
 			request is dropped
 	InfoUpdater	UpdateInfo: show what Resolve added to the item
+	ModesUI		Modes: the modes it can show candidates in, "i"
+			(insert mode), "c" (the command line) and "t" (a
+			terminal); without it, insert mode only
+	Visibler	Visible: whether the popup is open
+			(|goda_cmp#visible()|)
 
 The core never calls an extension's Vim script, and has no Vim script of its
 own for any UI: an extension calls the editor itself, through the Host it is
@@ -321,7 +548,8 @@ for the ones of this repository) reports back through these receivers:
 	goda_cmp#_done({item}, {reason})	the user accepted {item}
 					({reason} "cancel": dismissed)
 {item} is the complete-item the UI was given; its user_data is the
-reference that leads back to the source.
+reference that leads back to the source.  The engine itself tells the core's
+script what it shows (goda_cmp#_items()), for |goda-cmp-map-functions|.
 
 Buffer events~
 An EventHandler names the autocmd events it wants and for which filetypes
@@ -394,7 +622,7 @@ are the command-line types of |getcmdtype()| (":", "/", "?", "@" for
 expression register) never is.  Sources see `Context.Mode` "c",
 `Context.CmdType` and the command line before the cursor as `Input`.
 
-The UI must be able to show candidates there (`cmp.CmdlineUI`): "pum" can,
+The UI must be able to show candidates there (`cmp.ModesUI` with "c"): "pum" can,
 "native" cannot, since |complete()| works in insert mode only.  With
 `CmdlineSources` set and a UI that cannot, the binary reports a
 configuration error.  The UI can be chosen per filetype, as usual.
@@ -434,6 +662,30 @@ first the candidates found in a recent entry: >go
 Both take `Limit`, the number of entries looked at (1000 for the source, 500
 for the sorter, as in ddc.vim).  Outside the command line, the source offers
 nothing and the sorter keeps the order.
+
+==============================================================================
+TERMINAL                                                   *goda-cmp-terminal*
+
+Completion in |terminal| buffers works as in ddc.vim: enable it, use a UI that
+can show candidates there (`cmp.ModesUI` with "t": "pum"), and allow completion in
+special buffers: >vim
+
+	call goda_cmp#enable_terminal()
+	call goda_cmp#patch_global(#{
+	      \   ui: 'pum',
+	      \   specialBufferCompletion: v:true,
+	      \ })
+	tnoremap <C-n> <Cmd>call pum#map#select_relative(+1)<CR>
+	tnoremap <C-p> <Cmd>call pum#map#select_relative(-1)<CR>
+	tnoremap <C-y> <Cmd>call pum#map#confirm()<CR>
+<
+TextChangedT completes (it is in the default autoCompleteEvents).  Sources see
+`Context.Mode` "t"; Input is the terminal line before its cursor.  pum.vim
+cannot insert while selecting in a terminal (pum#map#insert_relative() does
+nothing there): select, then confirm, which sends the item to the job,
+replacing the typed part with <C-h>s (the shell's erase character must be
+<C-h>, `stty erase ^H`).  It needs the TextChangedT event (Vim 9.0.1513 or
+Neovim 0.9).
 
 ==============================================================================
 PREVIEW                                                     *goda-cmp-preview*

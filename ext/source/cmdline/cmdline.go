@@ -99,7 +99,7 @@ func (source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathe
 	}
 
 	if len(results) == 0 {
-		return cmp.Gathered{Start: start}, nil
+		return cmp.Gathered{Start: start, Incomplete: true}, nil
 	}
 
 	results = trimCommonPrefix(results, input, completeStr)
@@ -133,7 +133,9 @@ func (source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathe
 			items = append(items, cmp.Item{Word: w, UserData: w})
 		}
 	}
-	return cmp.Gathered{Start: start, Items: items}, nil
+	// getcompletion() filters by all of the command line: ask again for
+	// every keystroke instead of filtering these items again.
+	return cmp.Gathered{Start: start, Items: items, Incomplete: true}, nil
 }
 
 // Preview shows the help of the item's word, when there is any, as

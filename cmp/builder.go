@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
+	"slices"
 	"strings"
 
 	"github.com/Shougo/goda.vim/host"
@@ -110,58 +112,130 @@ func (b *Builder) resolve(filetype string, rt Patches) Config {
 			cfg = merge(cfg, p)
 		}
 	}
-	return merge(cfg, rt.Buffer)
+	return merge(merge(cfg, rt.Buffer), rt.Manual)
 }
 
 // checkConfig lists the problems of one configuration: names that were never
-// added and keyword patterns that do not compile.
-func (b *Builder) checkConfig(where string, cfg Config) []string {
+// added (nor aliased), parameters the extension does not take, patterns that
+// do not compile and values out of range. filetype is set for the
+// configuration of a filetype.
+func (b *Builder) checkConfig(where string, cfg Config, al Aliases, filetype bool) []string {
 	var errs []string
-	if cfg.UI != "" {
-		if _, ok := b.uis[cfg.UI]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: unknown ui %q", where, cfg.UI))
+	add := func(format string, args ...any) {
+		errs = append(errs, where+": "+fmt.Sprintf(format, args...))
+	}
+	known := func(reg map[string]bool, aliases map[string]string, name string) bool {
+		if reg[name] {
+			return true
 		}
+		base, ok := aliases[name]
+		return ok && reg[base]
+	}
+	srcs, filters, uis := names(b.sources), names(b.filters), names(b.uis)
+	for alias, base := range al.Source {
+		if !srcs[base] {
+			add("alias %q: unknown source %q", alias, base)
+		}
+	}
+	for alias, base := range al.Filter {
+		if !filters[base] {
+			add("alias %q: unknown filter %q", alias, base)
+		}
+	}
+	for alias, base := range al.UI {
+		if !uis[base] {
+			add("alias %q: unknown ui %q", alias, base)
+		}
+	}
+	if cfg.UI != "" && !known(uis, al.UI, cfg.UI) {
+		add("unknown ui %q", cfg.UI)
 	}
 	for _, s := range cfg.Sources {
-		if _, ok := b.sources[s]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: unknown source %q", where, s))
+		if !known(srcs, al.Source, s) {
+			add("unknown source %q", s)
 		}
 	}
-	for typ, names := range cfg.CmdlineSources {
-		for _, s := range names {
-			if _, ok := b.sources[s]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: unknown source %q in cmdlineSources[%q]", where, s, typ))
+	for typ, list := range cfg.CmdlineSources {
+		for _, s := range list {
+			if !known(srcs, al.Source, s) {
+				add("unknown source %q in cmdlineSources[%q]", s, typ)
 			}
 		}
 	}
 	for _, f := range cfg.PostFilters {
-		if _, ok := b.filters[f]; !ok {
-			errs = append(errs, fmt.Sprintf("%s: unknown filter %q in postFilters", where, f))
+		if !known(filters, al.Filter, f) {
+			add("unknown filter %q in postFilters", f)
 		}
 	}
+	// Parameters: the extension must take them (made on a throwaway set).
+	var tmp instances
+	for name, p := range cfg.SourceParams {
+		if _, _, err := lookup(&tmp, "source", b.sources, al.Source, name, p); err != nil {
+			add("sourceParams: %v", err)
+		}
+	}
+	for name, p := range cfg.FilterParams {
+		if _, _, err := lookup(&tmp, "filter", b.filters, al.Filter, name, p); err != nil {
+			add("filterParams: %v", err)
+		}
+	}
+	for name, p := range cfg.UIParams {
+		if _, _, err := lookup(&tmp, "ui", b.uis, al.UI, name, p); err != nil {
+			add("uiParams: %v", err)
+		}
+	}
+	switch cfg.ContextFiletype {
+	case "", "none", "context_filetype", "treesitter":
+	default:
+		add("contextFiletype must be \"none\", \"context_filetype\" or \"treesitter\", not %q", cfg.ContextFiletype)
+	}
+	if filetype && cfg.ContextFiletype != "" {
+		add("contextFiletype decides the filetype, so it cannot be set for one: set it globally or for a buffer")
+	}
 	for name, o := range cfg.SourceOptions {
-		if name != "_" {
-			if _, ok := b.sources[name]; !ok {
-				errs = append(errs, fmt.Sprintf("%s: sourceOptions for unknown source %q", where, name))
-			}
+		if name != "_" && !known(srcs, al.Source, name) {
+			add("sourceOptions for unknown source %q", name)
 		}
 		for _, list := range [][]string{o.Matchers, o.Sorters, o.Converters} {
 			for _, f := range list {
-				if _, ok := b.filters[f]; !ok {
-					errs = append(errs, fmt.Sprintf("%s: source %q uses unknown filter %q", where, name, f))
+				if !known(filters, al.Filter, f) {
+					add("source %q uses unknown filter %q", name, f)
 				}
 			}
 		}
-		for _, kp := range [][2]string{{"keywordPattern", o.KeywordPattern}, {"forceCompletionPattern", o.ForceCompletionPattern}} {
+		for _, kp := range [][2]string{{"keywordPattern", o.KeywordPattern}, {"forceCompletionPattern", o.ForceCompletionPattern}, {"volatilePattern", o.VolatilePattern}} {
 			if kp[1] == "" {
 				continue
 			}
 			if _, err := keywordRegexp(kp[1]); err != nil {
-				errs = append(errs, fmt.Sprintf("%s: source %q: %s: %v", where, name, kp[0], err))
+				add("source %q: %s: %v", name, kp[0], err)
 			}
+		}
+		if o.ReplaceSourceInputPattern != "" {
+			if _, err := regexp.Compile(o.ReplaceSourceInputPattern); err != nil {
+				add("source %q: replaceSourceInputPattern: %v", name, err)
+			}
+		}
+		switch o.Dup {
+		case "", "ignore", "keep", "force":
+		default:
+			add("source %q: dup must be \"ignore\", \"keep\" or \"force\", not %q", name, o.Dup)
+		}
+		switch o.MatcherKey {
+		case "", "word", "abbr", "menu", "kind", "info":
+		default:
+			add("source %q: matcherKey must be \"abbr\", \"menu\", \"kind\" or \"info\", not %q", name, o.MatcherKey)
 		}
 	}
 	return errs
+}
+
+func names[T any](m map[string]T) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k := range m {
+		out[k] = true
+	}
+	return out
 }
 
 // checkCmdlineUI reports command-line sources set with a UI that cannot show
@@ -174,7 +248,7 @@ func (b *Builder) checkCmdlineUI(where string, cfg Config) []string {
 	if !ok {
 		return nil // reported as an unknown ui
 	}
-	if c, ok := u.(CmdlineUI); !ok || !c.ShowsCmdline() {
+	if !slices.Contains(uiModes(u), "c") {
 		return []string{fmt.Sprintf("%s: cmdlineSources are set, but ui %q cannot show candidates on the command line (use one that can, such as \"pum\")", where, cfg.UI)}
 	}
 	return nil
@@ -193,7 +267,7 @@ func hasCmdlineSources(cfg Config) bool {
 func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
 	errs = append(errs, b.checkEvents()...)
-	errs = append(errs, b.checkConfig("global", b.global)...)
+	errs = append(errs, b.checkConfig("global", b.global, Aliases{}, false)...)
 	if b.global.UI == "" {
 		errs = append(errs, `global: no ui is set: add one (b.AddUI(native.New()), see ext/ui) and set Config.UI to its name`)
 	}
@@ -202,7 +276,7 @@ func (b *Builder) Validate() error {
 		errs = append(errs, b.checkCmdlineUI("filetype "+ft, merge(b.global, c))...)
 	}
 	for ft, c := range b.ft {
-		errs = append(errs, b.checkConfig("filetype "+ft, c)...)
+		errs = append(errs, b.checkConfig("filetype "+ft, c, Aliases{}, true)...)
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("goda-cmp configuration:\n  %s", joinErrs(errs))

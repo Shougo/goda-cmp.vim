@@ -115,12 +115,16 @@ function! goda_cmp#enable() abort
           \ . ' and run goda_cmp#build(): ' . status
   endif
   let s:enabled = 1
+  let s:registered = {}
+  let s:opts = {}
   augroup goda_cmp
     autocmd!
-    autocmd TextChangedI * call s:on_change('TextChangedI')
-    autocmd TextChangedP * call s:on_change('TextChangedP')
-    autocmd InsertLeave * call goda_cmp#hide()
+    autocmd InsertLeave * call goda_cmp#hide('InsertLeave')
+    " The events of autoCompleteEvents are listened to as the settings of
+    " a buffer become known.
+    autocmd BufEnter,FileType * call s:register_events()
   augroup END
+  call s:register_events()
   call s:setup_events()
 endfunction
 
@@ -130,10 +134,35 @@ function! goda_cmp#disable() abort
   endif
   unlet s:enabled
   call goda_cmp#disable_cmdline()
+  call goda_cmp#disable_terminal()
   silent! autocmd! goda_cmp
   silent! autocmd! goda_cmp_events
   call goda_cmp#hide()
   call goda#stop('cmp')
+endfunction
+
+" The events that complete (Config.AutoCompleteEvents). The command-line and
+" terminal events have their own groups, set by goda_cmp#enable_cmdline() and
+" goda_cmp#enable_terminal().
+let s:own_events = ['CmdlineEnter', 'CmdlineChanged', 'CmdlineLeave', 'TextChangedT']
+
+function! s:register_events() abort
+  if !exists('s:enabled') || !goda#is_running('cmp')
+    return
+  endif
+  for event in get(s:options(), 'autoCompleteEvents', [])
+    if has_key(s:registered, event) || index(s:own_events, event) >= 0
+      continue
+    endif
+    let s:registered[event] = 1
+    if !exists('##' . event)
+      echohl WarningMsg
+      echomsg 'goda-cmp: unknown autocmd event in autoCompleteEvents: ' . event
+      echohl None
+      continue
+    endif
+    execute 'autocmd goda_cmp' event '* call s:on_change(' string(event) ')'
+  endfor
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -171,8 +200,39 @@ function! goda_cmp#disable_cmdline() abort
 endfunction
 
 function! s:cmdline_leave() abort
-  call goda_cmp#hide()
+  call goda_cmp#hide('CmdlineLeave')
   call goda_cmp#disable_cmdline()
+endfunction
+
+" ---------------------------------------------------------------------------
+" Terminal completion, as ddc#enable_terminal_completion(): typing in a
+" terminal buffer completes, with a UI that can show candidates there (pum).
+" Terminal buffers are special buffers: set specialBufferCompletion for them.
+
+function! goda_cmp#enable_terminal() abort
+  call goda_cmp#enable()
+  if !exists('s:enabled')
+    return
+  endif
+  if !exists('##TextChangedT')
+    throw 'goda-cmp: terminal completion needs the TextChangedT event (Vim 9.0.1513 or Neovim 0.9)'
+  endif
+  let s:terminal = 1
+  augroup goda_cmp_terminal
+    autocmd!
+    autocmd TextChangedT * call s:on_change('TextChangedT')
+    if exists('##ModeChanged')
+      autocmd ModeChanged t:* call goda_cmp#hide('ModeChanged')
+    endif
+  augroup END
+endfunction
+
+function! goda_cmp#disable_terminal() abort
+  if !exists('s:terminal')
+    return
+  endif
+  unlet s:terminal
+  silent! autocmd! goda_cmp_terminal
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -240,15 +300,23 @@ endfunction
 " key, everything else is replaced. A patch is checked by the plugin when it
 " is running, and an invalid one throws.
 
+" The keys whose values are merged by key; for the first ones, the value of
+" each key is merged by key too.
+let s:nested_keys = ['sourceOptions', 'sourceParams', 'filterParams', 'uiParams']
+let s:map_keys = ['cmdlineSources']
+
 function! s:merge(base, patch) abort
   let r = deepcopy(a:base)
   for [key, val] in items(a:patch)
-    if key ==# 'sourceOptions' && type(val) == v:t_dict
-      let opts = get(r, 'sourceOptions', {})
-      for [src, opt] in items(val)
-        let opts[src] = extend(get(opts, src, {}), deepcopy(opt))
+    if index(s:nested_keys, key) >= 0 && type(val) == v:t_dict
+      let m = get(r, key, {})
+      for [name, v] in items(val)
+        let m[name] = type(v) == v:t_dict
+              \ ? extend(get(m, name, {}), deepcopy(v)) : deepcopy(v)
       endfor
-      let r.sourceOptions = opts
+      let r[key] = m
+    elseif index(s:map_keys, key) >= 0 && type(val) == v:t_dict
+      let r[key] = extend(get(r, key, {}), deepcopy(val))
     else
       let r[key] = deepcopy(val)
     endif
@@ -256,24 +324,26 @@ function! s:merge(base, patch) abort
   return r
 endfunction
 
-function! s:check(config) abort
+function! s:check(config, scope) abort
   if goda#is_running('cmp')
-    call goda#request('cmp', 'validate', a:config)
+    call goda#request('cmp', 'validate', a:config, s:aliases, a:scope)
   endif
 endfunction
 
 function! goda_cmp#patch_global(patch) abort
-  call s:check(a:patch)
+  call s:check(a:patch, 'global')
   let s:global_patch = s:merge(s:global_patch, a:patch)
 endfunction
 
 function! goda_cmp#patch_filetype(filetype, patch) abort
-  call s:check(a:patch)
-  let s:filetype_patch[a:filetype] = s:merge(get(s:filetype_patch, a:filetype, {}), a:patch)
+  for ft in type(a:filetype) == v:t_list ? a:filetype : [a:filetype]
+    call s:check(a:patch, 'filetype')
+    let s:filetype_patch[ft] = s:merge(get(s:filetype_patch, ft, {}), a:patch)
+  endfor
 endfunction
 
 function! goda_cmp#patch_buffer(patch) abort
-  call s:check(a:patch)
+  call s:check(a:patch, 'buffer')
   let b:goda_cmp_patch = s:merge(get(b:, 'goda_cmp_patch', {}), a:patch)
 endfunction
 
@@ -290,43 +360,70 @@ function! goda_cmp#get_buffer() abort
 endfunction
 
 function! goda_cmp#set_global(config) abort
-  call s:check(a:config)
+  call s:check(a:config, 'global')
   let s:global_patch = deepcopy(a:config)
 endfunction
 
 function! goda_cmp#set_filetype(filetype, config) abort
-  call s:check(a:config)
-  let s:filetype_patch[a:filetype] = deepcopy(a:config)
+  for ft in type(a:filetype) == v:t_list ? a:filetype : [a:filetype]
+    call s:check(a:config, 'filetype')
+    let s:filetype_patch[ft] = deepcopy(a:config)
+  endfor
 endfunction
 
 function! goda_cmp#set_buffer(config) abort
-  call s:check(a:config)
+  call s:check(a:config, 'buffer')
   let b:goda_cmp_patch = deepcopy(a:config)
 endfunction
 
+" The configuration in effect for the current buffer (Go and Vim script
+" settings together), as ddc#custom#get_current().
+function! goda_cmp#get_current() abort
+  return goda#request('cmp', 'current', s:filetype(), s:patches())
+endfunction
+
+" Give the extension {base} of {type} ("source", "filter" or "ui") another
+" name, under which it can have options and params of its own, as
+" ddc#custom#alias().
+function! goda_cmp#alias(type, alias, base) abort
+  if index(['source', 'filter', 'ui'], a:type) < 0
+    throw 'goda-cmp: the type of an alias is "source", "filter" or "ui", not ' . string(a:type)
+  endif
+  let aliases = deepcopy(s:aliases)
+  let aliases[a:type][a:alias] = a:base
+  if goda#is_running('cmp')
+    call goda#request('cmp', 'validate', {}, aliases, 'global')
+  endif
+  let s:aliases = aliases
+  let s:opts = {}
+endfunction
+
+let s:aliases = {'source': {}, 'filter': {}, 'ui': {}}
+
 " What the plugin needs to resolve the settings of this buffer.
-function! s:patches() abort
+function! s:patches(...) abort
+  let ft = a:0 ? a:1 : s:filetype()
   let fts = {}
-  for part in split(&filetype, '\.')
+  for part in split(ft, '\.')
     if has_key(s:filetype_patch, part)
       let fts[part] = s:filetype_patch[part]
     endif
   endfor
-  return {'global': s:global_patch, 'filetype': fts, 'buffer': get(b:, 'goda_cmp_patch', {})}
+  return {'global': s:global_patch, 'filetype': fts,
+        \ 'buffer': get(b:, 'goda_cmp_patch', {}), 'aliases': s:aliases}
 endfunction
 
 " ---------------------------------------------------------------------------
 " Requests
 
-function! s:options() abort
-  let patches = s:patches()
-  let key = &filetype . "\n" . json_encode(patches)
+function! s:request_options(filetype, patches) abort
+  let key = a:filetype . "\n" . json_encode(a:patches)
   if !has_key(s:opts, key)
     if len(s:opts) > 50
       let s:opts = {}
     endif
     try
-      let s:opts[key] = goda#request('cmp', 'options', &filetype, patches)
+      let s:opts[key] = goda#request('cmp', 'options', a:filetype, a:patches)
     catch
       return {'autoComplete': 0, 'delay': 0}
     endtry
@@ -334,57 +431,169 @@ function! s:options() abort
   return s:opts[key]
 endfunction
 
-" Insert mode or, after goda_cmp#enable_cmdline(), the command line.
-function! s:cmdline() abort
-  return mode() ==# 'c' && exists('s:cmdline')
+function! s:options() abort
+  let ft = s:filetype()
+  return s:request_options(ft, s:patches(ft))
 endfunction
 
-" The text before the cursor: in the buffer, or on the command line.
+" The filetype of a request: 'filetype', or with contextFiletype (set
+" globally or for the buffer, so known without a filetype) the language at the
+" cursor.
+function! s:filetype() abort
+  if !goda#is_running('cmp')
+    return &filetype
+  endif
+  let patches = {'global': s:global_patch, 'filetype': {},
+        \ 'buffer': get(b:, 'goda_cmp_patch', {}), 'aliases': s:aliases}
+  let how = get(s:request_options('', patches), 'contextFiletype', 'none')
+  if how ==# 'context_filetype'
+    if exists('*context_filetype#get_filetype')
+      let ft = context_filetype#get_filetype()
+      if ft !=# ''
+        return ft
+      endif
+    endif
+  elseif how ==# 'treesitter'
+    let ft = goda_cmp#syntax#lang()
+    if ft !=# ''
+      return ft
+    endif
+  endif
+  return &filetype
+endfunction
+
+" Insert mode, the command line (after goda_cmp#enable_cmdline()) or a
+" terminal (after goda_cmp#enable_terminal()): "i", "c" or "t".
+function! s:mode() abort
+  let m = mode()
+  if m ==# 'c'
+    return exists('s:cmdline') ? 'c' : ''
+  elseif m ==# 't'
+    return exists('s:terminal') ? 't' : ''
+  endif
+  return m =~# '^i' ? 'i' : ''
+endfunction
+
+function! s:cmdline() abort
+  return s:mode() ==# 'c'
+endfunction
+
+" The cursor column (byte, 1-based) and the text of its line: in the buffer,
+" on the command line, or in a terminal (Vim keeps the terminal's cursor apart
+" from the buffer's).
+function! s:col() abort
+  let m = s:mode()
+  if m ==# 't' && !has('nvim')
+    return term_getcursor(bufnr('%'))[1]
+  endif
+  return m ==# 'c' ? getcmdpos() : col('.')
+endfunction
+
+function! s:line() abort
+  let m = s:mode()
+  if m ==# 'c'
+    return getcmdline()
+  elseif m ==# 't' && !has('nvim')
+    return term_getline('', term_getcursor(bufnr('%'))[0])
+  endif
+  return getline('.')
+endfunction
+
+" The text before the cursor.
 function! s:input() abort
-  return s:cmdline() ? strpart(getcmdline(), 0, getcmdpos() - 1)
-        \ : strpart(getline('.'), 0, col('.') - 1)
+  if s:mode() ==# 't' && !has('nvim')
+    " The terminal's cursor is a screen column.
+    let text = s:line()
+    let col = s:col()
+    return col > strdisplaywidth(text) ? text : matchstr(text, '^.*\%<' . col . 'v')
+  endif
+  return strpart(s:line(), 0, s:col() - 1)
+endfunction
+
+function! s:lnum() abort
+  if s:mode() ==# 't' && !has('nvim')
+    let rows = term_getsize(bufnr('%'))[0]
+    return max([1, line('$') - rows + term_getcursor(bufnr('%'))[0]])
+  endif
+  return line('.')
 endfunction
 
 " What identifies a request: the same key twice is not asked again.
 function! s:key() abort
-  return [bufnr('%'), s:cmdline() ? 'c' : line('.'), s:input()]
+  return [bufnr('%'), s:cmdline() ? 'c' : s:lnum(), s:input()]
 endfunction
 
 function! s:context(manual, event) abort
   let s:seq += 1
-  let cmdline = s:cmdline()
+  let mode = s:mode()
+  let ft = s:filetype()
   return {
         \ 'seq': s:seq,
         \ 'tick': b:changedtick,
         \ 'bufnr': bufnr('%'),
-        \ 'lnum': line('.'),
-        \ 'col': cmdline ? getcmdpos() : col('.'),
+        \ 'lnum': s:lnum(),
+        \ 'col': s:col(),
         \ 'input': s:input(),
-        \ 'filetype': &filetype,
-        \ 'mode': cmdline ? 'c' : 'i',
-        \ 'cmdtype': cmdline ? getcmdtype() : '',
+        \ 'filetype': ft,
+        \ 'mode': mode ==# '' ? 'i' : mode,
+        \ 'cmdtype': mode ==# 'c' ? getcmdtype() : '',
         \ 'manual': a:manual ? v:true : v:false,
         \ 'event': a:event,
-        \ 'patches': s:patches(),
+        \ 'patches': s:patches(ft),
         \ }
 endfunction
 
-function! s:send(manual, event) abort
+" EXTRA: more keys of the request ("options", "hide", "update").
+function! s:send(manual, event, ...) abort
   let s:timer = -1
-  if !(mode() =~# '^i' || s:cmdline()) || !goda#is_running('cmp')
+  if s:mode() ==# '' || !goda#is_running('cmp')
     return
   endif
-  call goda#notify('cmp', 'complete', s:context(a:manual, a:event))
+  call goda#notify('cmp', 'complete', extend(s:context(a:manual, a:event), a:0 ? a:1 : {}))
 endfunction
 
+" Changes that are no typing: completion is skipped for them, as in ddc.vim.
+function! s:skipped() abort
+  if &paste || (s:mode() ==# 'i' && &iminsert == 1)
+    return 1
+  endif
+  return s:mode() ==# 'c' && wildmenumode()
+endfunction
+
+let s:prev_input = ''
+let s:skip_next = 0
+
 function! s:on_change(event) abort
-  if !goda#is_running('cmp')
+  if !goda#is_running('cmp') || s:mode() ==# ''
+    return
+  endif
+  let input = s:input()
+  let prev = s:prev_input
+  let s:prev_input = input
+  if s:skip_next > 0
+    let s:skip_next -= 1
+    return
+  endif
+  if s:skipped()
     return
   endif
   let opts = s:options()
   " Text that the popup itself inserted (selecting an item) is told apart by
   " the UI, on the Go side (cmp.Skipper).
   if !get(opts, 'autoComplete', 1)
+        \ || index(get(opts, 'autoCompleteEvents', [a:event]), a:event) < 0
+    return
+  endif
+  if s:mode() !=# 'c' && &buftype !=# '' && !get(opts, 'specialBufferCompletion', 0)
+    return
+  endif
+  " A backspace closes the popup instead of completing again (less
+  " flicker), unless backspaceCompletion is set.
+  if !get(opts, 'backspaceCompletion', 0) && input !=# prev
+        \ && strlen(input) < strlen(prev) && stridx(prev, input) == 0
+        \ && strchars(prev) == strchars(input) + 1
+    call goda_cmp#hide('Backspace')
+    let s:last = s:key()
     return
   endif
   let key = s:key()
@@ -402,31 +611,78 @@ function! s:on_change(event) abort
   if s:timer != -1
     call timer_stop(s:timer)
   endif
-  let s:timer = timer_start(get(opts, 'delay', 0), {-> s:send(0, a:event)})
+  let extra = get(opts, 'hideOnEvents', 0) ? {'hide': v:true} : {}
+  let s:timer = timer_start(get(opts, 'delay', 0), {-> s:send(0, a:event, extra)})
 endfunction
 
 " Complete now, whatever the typed length. Meant for a mapping:
 "   inoremap <C-n> <Cmd>call goda_cmp#complete()<CR>
-function! goda_cmp#complete() abort
+" {options} is a patch for this request (and the narrowing that follows), as
+" ddc#map#manual_complete({options}).
+function! goda_cmp#complete(options = {}) abort
   let s:last = []
   let s:accepted = []
-  call s:send(1, '')
+  call s:send(1, 'Manual', empty(a:options) ? {} : {'options': a:options})
   return ''
 endfunction
 
-function! goda_cmp#hide() abort
+function! goda_cmp#hide(event = 'Manual') abort
   if s:timer != -1
     call timer_stop(s:timer)
     let s:timer = -1
   endif
   let s:last = []
   let s:accepted = []
+  let s:items = {}
   if goda#is_running('cmp')
     try
-      call goda#notify('cmp', 'hide', &filetype, s:patches())
+      let ft = s:filetype()
+      call goda#notify('cmp', 'hide', ft, s:patches(ft))
     catch
     endtry
   endif
+endfunction
+
+" Is the popup open? Asks the UI (cmp.Visibler).
+function! goda_cmp#visible() abort
+  if !exists('s:enabled') || !goda#is_running('cmp')
+    return v:false
+  endif
+  try
+    let ft = s:filetype()
+    return goda#request('cmp', 'visible', ft, s:patches(ft)) ? v:true : v:false
+  catch
+    return v:false
+  endtry
+endfunction
+
+" Skip the next automatic completion.
+function! goda_cmp#skip_next_complete() abort
+  let s:skip_next += 1
+endfunction
+
+" Act as if the autocmd {event} happened: the sources that listen to it hear
+" about it, and it completes when it is in autoCompleteEvents.
+function! goda_cmp#on_event(event) abort
+  if !exists('s:enabled') || !goda#is_running('cmp')
+    return
+  endif
+  if has_key(s:event_fts, a:event)
+    call s:on_event(a:event, bufnr('%'))
+  endif
+  call s:on_change(a:event)
+endfunction
+
+" For UIs not of goda-cmp: the user accepted {item}.
+function! goda_cmp#on_complete_done(item) abort
+  call goda_cmp#_done(a:item, 'accept')
+endfunction
+
+" Replace the items gathered last by the source {name} with {items} (a list of
+" complete-items) and show the list again, as ddc#update_items(). Nothing
+" happens when the source has not gathered for this word.
+function! goda_cmp#update_items(name, items) abort
+  call s:send(0, 'Update', {'update': {'name': a:name, 'items': a:items}})
 endfunction
 
 " What the source of ITEM shows for it in a preview window, in ddc.vim's
@@ -448,6 +704,33 @@ function! goda_cmp#get_previewer(item) abort
 endfunction
 
 " ---------------------------------------------------------------------------
+" What the engine shows (it calls goda_cmp#_items(), this file's own), for the
+" goda_cmp#map#*() functions.
+
+let s:items = {}
+
+function! goda_cmp#_items(r) abort
+  let s:items = a:r.seq == s:seq ? a:r : {}
+endfunction
+
+" {items, col, sources} of the list shown, or {} when there is none.
+function! goda_cmp#_shown() abort
+  if empty(s:items) || s:items.seq != s:seq || empty(s:items.items)
+    return {}
+  endif
+  return s:items
+endfunction
+
+" The text before the cursor, for goda_cmp#map#*().
+function! goda_cmp#_input() abort
+  return s:input()
+endfunction
+
+function! goda_cmp#_col() abort
+  return s:col()
+endfunction
+
+" ---------------------------------------------------------------------------
 " Receivers for the Vim script of UIs. They are the only way an extension's
 " Vim script reaches the core.
 
@@ -457,8 +740,12 @@ function! goda_cmp#_fresh(r) abort
   if !exists('s:enabled') || a:r.seq != s:seq
     return 0
   endif
-  if get(a:r, 'mode', 'i') ==# 'c'
+  let mode = get(a:r, 'mode', 'i')
+  if mode ==# 'c'
     return mode() ==# 'c'
+  elseif mode ==# 't'
+    " A terminal changes on its own: only the mode is checked.
+    return mode() ==# 't'
   endif
   return a:r.tick == b:changedtick && mode() =~# '^i'
 endfunction
@@ -488,6 +775,8 @@ function! goda_cmp#_done(item, reason) abort
   endif
   let s:last = s:key()
   let s:accepted = [s:last[0], s:last[2]]
+  let s:prev_input = s:last[2]
+  let s:items = {}
   if a:reason !=# 'cancel' && goda#is_running('cmp')
     call goda#notify('cmp', 'done', ref)
   endif

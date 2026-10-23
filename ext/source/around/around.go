@@ -14,10 +14,10 @@ import (
 // Params are the settings of the source. The zero value is usable.
 type Params struct {
 	// MinLength: shorter words are not offered (default 2).
-	MinLength int
+	MinLength int `json:"minLength"`
 	// MaxLines: only this many lines around the cursor are scanned
 	// (default 5000).
-	MaxLines int
+	MaxLines int `json:"maxLines"`
 }
 
 type source struct{ p Params }
@@ -34,6 +34,16 @@ func New(p Params) cmp.Source {
 }
 
 func (source) Name() string { return "around" }
+
+// WithParams sets the parameters from Vim script (sourceParams), by their
+// JSON names: {"minLength": 3}.
+func (s source) WithParams(p cmp.Params) (any, error) {
+	np, err := cmp.PatchParams(s.p, p)
+	if err != nil {
+		return nil, err
+	}
+	return New(np), nil
+}
 
 func (s source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathered, error) {
 	start := c.KeywordStart()

@@ -26,7 +26,7 @@ import (
 type Params struct {
 	// Limit is how many history entries, from the newest, are looked at.
 	// Default 500.
-	Limit int
+	Limit int `json:"limit"`
 }
 
 type filter struct{ limit int }
@@ -40,6 +40,15 @@ func New(p Params) cmp.Filter {
 }
 
 func (filter) Name() string { return "sortercmdlinehistory" }
+
+// WithParams sets the parameters from Vim script (filterParams).
+func (f filter) WithParams(p cmp.Params) (any, error) {
+	np, err := cmp.PatchParams(Params{Limit: f.limit}, p)
+	if err != nil {
+		return nil, err
+	}
+	return New(np), nil
+}
 
 func (f filter) Filter(ctx context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
 	if in.Host == nil || in.Context == nil || in.Context.Mode != "c" {

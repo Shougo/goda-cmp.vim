@@ -32,8 +32,18 @@ function! goda_cmp#ui#pum#show(r) abort
   if !goda_cmp#_fresh(a:r)
     return 0
   endif
-  call pum#open(a:r.col, a:r.items)
+  " pum.vim inserts the item in a terminal itself.
+  let mode = a:r.mode ==# 't' ? 't' : mode()
+  call pum#open(a:r.col, a:r.items, mode, get(a:r, 'insert', v:false))
+  if get(a:r, 'manual', v:false) && mode ==# 't' && exists('*pum#_inc_skip_complete')
+    " As ddc-ui-pum: the change pum.vim makes next is its own.
+    call pum#_inc_skip_complete()
+  endif
   return 1
+endfunction
+
+function! goda_cmp#ui#pum#visible() abort
+  return exists('*pum#visible') && pum#visible()
 endfunction
 
 function! goda_cmp#ui#pum#hide() abort

@@ -1,6 +1,7 @@
 // Package pum is a UI that shows candidates with pum.vim, which must be
-// installed. It works on the command line too (cmp.CmdlineUI). Its key mappings and options are configured in Vim script as
-// usual (pum#set_option, pum#map#...). Its Vim script is
+// installed. It works on the command line and in terminals too
+// (cmp.ModesUI). Its key mappings and options are configured
+// in Vim script as usual (pum#set_option, pum#map#...). Its Vim script is
 // autoload/goda_cmp/ui/pum.vim.
 package pum
 
@@ -11,21 +12,46 @@ import (
 	"github.com/Shougo/goda.vim/sdk"
 )
 
-type ui struct{}
+// Params are the parameters of the UI, as ddc-ui-pum's.
+type Params struct {
+	// Insert inserts the first item when the popup opens, which suits
+	// manual completion.
+	Insert bool `json:"insert"`
+}
 
-// New returns the UI, named "pum".
-func New() cmp.UI { return ui{} }
+type ui struct{ p Params }
+
+// New returns the UI, named "pum". The parameters may be given (at most one
+// Params).
+func New(p ...Params) cmp.UI {
+	var u ui
+	if len(p) > 0 {
+		u.p = p[0]
+	}
+	return u
+}
 
 func (ui) Name() string { return "pum" }
 
-func (ui) Show(ctx context.Context, h sdk.Host, r cmp.ShowRequest) error {
+// WithParams sets the parameters from Vim script (uiParams).
+func (u ui) WithParams(p cmp.Params) (any, error) {
+	np, err := cmp.PatchParams(u.p, p)
+	if err != nil {
+		return nil, err
+	}
+	return ui{np}, nil
+}
+
+func (u ui) Show(ctx context.Context, h sdk.Host, r cmp.ShowRequest) error {
 	_, err := h.Call(ctx, "goda_cmp#ui#pum#show", map[string]any{
-		"seq":   r.Context.Seq,
-		"tick":  r.Context.Tick,
-		"mode":  r.Context.Mode,
-		"col":   r.Col,
-		"items": r.Items,
-		"final": r.Final,
+		"seq":    r.Context.Seq,
+		"tick":   r.Context.Tick,
+		"mode":   r.Context.Mode,
+		"manual": r.Context.Manual,
+		"col":    r.Col,
+		"items":  r.Items,
+		"final":  r.Final,
+		"insert": u.p.Insert,
 	})
 	return err
 }
@@ -42,13 +68,32 @@ func (ui) SkipCompletion(ctx context.Context, h sdk.Host, _ *cmp.Context) (bool,
 	if err != nil {
 		return false, err
 	}
+	return truthy(v), nil
+}
+
+// Visible asks pum.vim whether its popup is open.
+func (ui) Visible(ctx context.Context, h sdk.Host) (bool, error) {
+	v, err := h.Call(ctx, "goda_cmp#ui#pum#visible")
+	if err != nil {
+		return false, err
+	}
+	return truthy(v), nil
+}
+
+func truthy(v any) bool {
 	switch b := v.(type) {
 	case bool:
-		return b, nil
+		return b
 	case int64:
-		return b != 0, nil
+		return b != 0
+	case int:
+		return b != 0
+	case uint64:
+		return b != 0
+	case int8:
+		return b != 0
 	}
-	return false, nil
+	return false
 }
 
 // UpdateInfo shows the resolved Info of the current item.
@@ -60,11 +105,14 @@ func (ui) UpdateInfo(ctx context.Context, h sdk.Host, it cmp.Item) error {
 	return err
 }
 
-// ShowsCmdline: pum.vim opens on the command line as well.
-func (ui) ShowsCmdline() bool { return true }
+// Modes: pum.vim opens in insert mode, on the command line and in
+// terminals.
+func (ui) Modes() []string { return []string{"i", "c", "t"} }
 
 var (
-	_ cmp.CmdlineUI   = ui{}
-	_ cmp.Skipper     = ui{}
-	_ cmp.InfoUpdater = ui{}
+	_ cmp.ModesUI      = ui{}
+	_ cmp.Skipper      = ui{}
+	_ cmp.InfoUpdater  = ui{}
+	_ cmp.Visibler     = ui{}
+	_ cmp.Configurable = ui{}
 )

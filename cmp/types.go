@@ -146,6 +146,10 @@ type Gathered struct {
 	// Context.KeywordStart().
 	Start int
 	Items []Item
+	// Incomplete says that the items are not all there are (LSP
+	// isIncomplete): the source is asked again on the next keystroke
+	// instead of its items being filtered again (see SourceOption.IsVolatile).
+	Incomplete bool
 }
 
 // Source produces candidates.
@@ -270,6 +274,9 @@ type FilterInput struct {
 	// ranks by the command-line history). It is nil when the filter is
 	// called outside the engine, in tests for instance.
 	Host sdk.Host
+	// IgnoreCase is the ignoreCase option of the source: a matcher should
+	// ignore case completely when it is set. It is false for postFilters.
+	IgnoreCase bool
 }
 
 // Filter transforms a list of candidates: it may drop (matcher), reorder

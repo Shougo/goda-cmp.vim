@@ -383,7 +383,10 @@ func (s *Source) gathered(cl *client, c *cmp.Context, ks int, after string, raws
 		}
 		items[i] = it
 	}
-	return cmp.Gathered{Start: minStart, Items: items}
+	// The server filters by itself (fuzzy, often with isIncomplete): it is
+	// asked again for every keystroke instead of the engine filtering these
+	// items again.
+	return cmp.Gathered{Start: minStart, Items: items, Incomplete: true}
 }
 
 // joinLines is the text of a buffer: every line ends with a newline.
