@@ -13,8 +13,9 @@ Run-time patches	|goda-cmp-patch|
 Selecting candidates	|goda-cmp-select|
 Popup			|goda-cmp-popup|
 Extensions		|goda-cmp-extension|
-Partial results		|goda-cmp-partial|
 Command line		|goda-cmp-cmdline|
+Preview			|goda-cmp-preview|
+Partial results		|goda-cmp-partial|
 Language servers	|goda-cmp-lsp|
 FAQ			|goda-cmp-faq|
 
@@ -102,6 +103,15 @@ goda_cmp#complete()
                                                              *goda_cmp#hide()*
 goda_cmp#hide()
 		Close the popup.
+
+                                                    *goda_cmp#get_previewer()*
+goda_cmp#get_previewer({item})
+		Return what the source of {item} shows for it in a preview
+		window, in the format of ddc.vim's previewers: a dictionary
+		with "kind" ("empty", "help", "text", "markdown" or
+		"command") and "tag", "contents" or "command".  "empty" for
+		an item that is not goda-cmp's, or whose source has nothing
+		to show.  See |goda-cmp-preview|.
 
                                                    *goda_cmp#enable_cmdline()*
 goda_cmp#enable_cmdline()
@@ -276,10 +286,16 @@ working:
 	Resolver	Resolve: fill in an item when it is selected
 	Closer		Close: release resources when the plugin stops
 	EventHandler	Events, OnEvent: act on buffer events
+	Previewer	Preview: what to show in a preview window
+			(|goda-cmp-preview|)
 
 `Item` also has FilterText and SortText (LSP filterText and sortText), Dup,
 and UserData, which stays in the plugin process and comes back in
 OnCompleteDone and Resolve.
+
+A filter gets the Host in `FilterInput.Host`, for the rare one that asks the
+editor (the sorter of the command-line history); it is nil when a test calls
+the filter directly.
 
 Sources keep their own caches: the engine asks a source on every request, so
 a source that got a complete answer can filter it itself for the next
@@ -385,7 +401,57 @@ configuration error.  The UI can be chosen per filetype, as usual.
 
 `ext/source/cmdline` (a port of ddc-source-cmdline) offers what
 |getcompletion()| does for the command line.  Put "fuzzy" in 'wildoptions'
-for fuzzy matched items.
+for fuzzy matched items.  It previews the help of an item that has one
+(|goda-cmp-preview|).
+
+`ext/source/cmdlinehistory` (a port of ddc-source-cmdline_history) offers
+the entries of the history of the command-line type (|histget()|), the newest
+first: whole entries while the command line has no space, and after one, the
+rest of the entries that start with the same text.  When the command line
+completes files or directories, only entries that exist are offered.
+`ext/filter/sortercmdlinehistory` (ddc-filter-sorter_cmdline_history) puts
+first the candidates found in a recent entry: >go
+
+	import "github.com/Shougo/goda-cmp.vim/ext/filter/sortercmdlinehistory"
+	import "github.com/Shougo/goda-cmp.vim/ext/source/cmdlinehistory"
+
+	b.AddSource(cmdlinehistory.New(cmdlinehistory.Params{}))
+	b.AddFilter(sortercmdlinehistory.New(sortercmdlinehistory.Params{}))
+	b.PatchGlobal(cmp.Config{
+	    CmdlineSources: map[string][]string{
+	        ":": {"cmdline", "cmdlinehistory"},
+	        "/": {"cmdlinehistory", "around"},
+	    },
+	    SourceOptions: map[string]cmp.SourceOption{
+	        "cmdline": {
+	            Mark:    "cmdline",
+	            Sorters: []string{"sortercmdlinehistory"},
+	        },
+	        "cmdlinehistory": {Mark: "history"},
+	    },
+	})
+<
+Both take `Limit`, the number of entries looked at (1000 for the source, 500
+for the sorter, as in ddc.vim).  Outside the command line, the source offers
+nothing and the sorter keeps the order.
+
+==============================================================================
+PREVIEW                                                     *goda-cmp-preview*
+
+A source that implements `Previewer` says what to show for an item in a
+preview window, in the format of ddc.vim's previewers (`cmp.Preview`): the
+help of a tag, lines of text or markdown, or a command run in the window.
+The cmdline source shows the help of an item.  The engine has no window of
+its own: a UI that has one asks |goda_cmp#get_previewer()|.  pum.vim does,
+with its preview option and its `previewer` option (a pum.vim that has it): >vim
+
+	call pum#set_option(#{
+	      \   preview: v:true,
+	      \   previewer: 'goda_cmp#get_previewer',
+	      \ })
+<
+An item whose source has no previewer, or gives "empty", shows its info
+there instead.
 
 ==============================================================================
 PARTIAL RESULTS                                             *goda-cmp-partial*

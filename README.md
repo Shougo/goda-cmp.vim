@@ -53,7 +53,9 @@ extensions and partial results.
         ▼
  goda-cmp.vim/cmp                 engine and interfaces (no UI, no source)
  goda-cmp.vim/ext/...             bundled extensions: ui/native, ui/pum,
-                                  source/around, source/lsp, filter/...
+                                  source/around, source/lsp,
+                                  source/cmdline, source/cmdlinehistory,
+                                  filter/...
  goda-cmp-source-*, goda-cmp-filter-*   extensions (Go modules, own repositories)
         │
         ▼  go build  →  one binary, started by goda.vim (Vim or Neovim)
@@ -81,8 +83,8 @@ without it.
 
 Compared with ddc.vim: `sourceParams` set from Vim script (parameters are Go
 values given to the constructor), and `ignoreCase` options. Command-line
-completion is there (`:help goda-cmp-cmdline`), without a previewer for the
-cmdline source.
+completion is there (`:help goda-cmp-cmdline`); previews need a pum.vim with
+its `previewer` option (`:help goda-cmp-preview`).
 
 ## License
 

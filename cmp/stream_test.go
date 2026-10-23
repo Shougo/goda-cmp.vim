@@ -333,3 +333,60 @@ func TestEngineClose(t *testing.T) {
 		t.Errorf("the error of a source's Close is lost")
 	}
 }
+
+type previewSource struct{ fakeSource }
+
+func (s previewSource) Preview(_ context.Context, _ sdk.Host, a cmp.DoneArgs) (cmp.Preview, error) {
+	switch a.Item.Word {
+	case "alpha":
+		return cmp.Preview{Kind: cmp.PreviewHelp, Tag: a.Item.Word + "()"}, nil
+	case "alps":
+		return cmp.Preview{}, nil // no kind: empty
+	}
+	return cmp.Preview{Kind: cmp.PreviewText, Contents: []string{"one", "two"}}, nil
+}
+
+// hostFilter records the Host it was given.
+type hostFilter struct{ got *[]sdk.Host }
+
+func (hostFilter) Name() string { return "hostfilter" }
+func (f hostFilter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
+	*f.got = append(*f.got, in.Host)
+	return in.Items, nil
+}
+
+func TestPreview(t *testing.T) {
+	var hosts []sdk.Host
+	b := newBuilder()
+	b.AddSource(previewSource{fakeSource{name: "p", items: []string{"alpha", "alps", "amber"}}})
+	b.AddSource(fakeSource{name: "plain", items: []string{"apple"}})
+	b.AddFilter(hostFilter{&hosts})
+	b.PatchGlobal(cmp.Config{
+		Sources:       []string{"p", "plain"},
+		SourceOptions: map[string]cmp.SourceOption{"_": {Sorters: []string{"hostfilter"}}},
+	})
+	p, err := b.Plugin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := uiHost()
+	p.Handlers()["complete"](context.Background(), h, []any{ctxMap(1, "a", "")})
+	if len(hosts) == 0 || hosts[0] != sdk.Host(h) {
+		t.Errorf("filters got hosts %v", hosts)
+	}
+	refs := refsOf(h)
+	for word, want := range map[string]any{
+		"alpha": map[string]any{"kind": "help", "tag": "alpha()"},
+		"alps":  map[string]any{"kind": "empty"},
+		"amber": map[string]any{"kind": "text", "contents": []any{"one", "two"}},
+		"apple": map[string]any{"kind": "empty"}, // not a Previewer
+	} {
+		got, err := p.Handlers()["preview"](context.Background(), h, []any{refs[word]})
+		if err != nil || !reflect.DeepEqual(got, want) {
+			t.Errorf("preview %s = %#v, %v; want %#v", word, got, err, want)
+		}
+	}
+	if _, err := p.Handlers()["preview"](context.Background(), h, []any{"999:0"}); err == nil {
+		t.Errorf("an unknown reference must be an error")
+	}
+}

@@ -33,8 +33,13 @@ function! DumpPopup() abort
       endfor
     endif
   endif
+  " pum.vim's preview window: the 'buftype' of the buffer it shows ("help"
+  " for a help previewer), "" when it is closed. (In Neovim the help buffer
+  " is not pum#get_preview_buf().)
+  let preview = ui ==# 'pum' && exists('*pum#preview_visible') && pum#preview_visible()
+        \ ? getbufvar(winbufnr(pum#_get().preview_id), '&buftype', '?') : ''
   call writefile([json_encode({'visible': visible ? v:true : v:false, 'words': words, 'line': getline('.'),
-        \ 'cmdline': mode() ==# 'c' ? getcmdline() : ''})], $GODA_OUT, 'a')
+        \ 'cmdline': mode() ==# 'c' ? getcmdline() : '', 'preview': preview})], $GODA_OUT, 'a')
   return ''
 endfunction
 inoremap <C-]> <Cmd>call DumpPopup()<CR>
@@ -51,6 +56,11 @@ if !empty($GODA_CMDLINE)
   if !empty($GODA_REAL_PUM)
     " The first Ctrl-N selects the first item.
     call pum#set_option('auto_select', v:false)
+    " Previews, with a pum.vim that has the previewer option.
+    if has_key(pum#_options(), 'previewer')
+      call pum#set_option(#{preview: v:true, preview_delay: 10,
+            \ previewer: 'goda_cmp#get_previewer'})
+    endif
     cnoremap <C-n> <Cmd>call pum#map#insert_relative(+1)<CR>
     cnoremap <C-y> <Cmd>call pum#map#confirm()<CR>
   endif

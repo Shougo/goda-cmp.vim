@@ -11,7 +11,9 @@
 //		SourceOptions:  map[string]cmp.SourceOption{"cmdline": {Mark: "cmdline"}},
 //	})
 //
-// For fuzzy matched items, put "fuzzy" in 'wildoptions'. In insert mode (a
+// It is a cmp.Previewer: an item with help (":help {word}") previews it; see
+// goda_cmp#get_previewer(). For fuzzy matched items, put "fuzzy" in
+// 'wildoptions'. In insert mode (a
 // Vim script buffer) it completes the command of the current line, joining
 // continuation lines ("\") above it.
 package cmdline
@@ -122,13 +124,36 @@ func (source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathe
 
 	items := make([]cmp.Item, 0, len(results))
 	for _, w := range results {
+		// UserData keeps the word as the source made it: the engine may put
+		// what other sources start with in front of Word.
 		if strings.HasSuffix(w, "/") {
-			items = append(items, cmp.Item{Word: strings.TrimSuffix(w, "/"), Abbr: w})
+			word := strings.TrimSuffix(w, "/")
+			items = append(items, cmp.Item{Word: word, Abbr: w, UserData: word})
 		} else {
-			items = append(items, cmp.Item{Word: w})
+			items = append(items, cmp.Item{Word: w, UserData: w})
 		}
 	}
 	return cmp.Gathered{Start: start, Items: items}, nil
+}
+
+// Preview shows the help of the item's word, when there is any, as
+// ddc-source-cmdline does.
+func (source) Preview(ctx context.Context, h sdk.Host, a cmp.DoneArgs) (cmp.Preview, error) {
+	word, ok := a.Item.UserData.(string)
+	if !ok {
+		word = a.Item.Word
+	}
+	if word == "" {
+		return cmp.Preview{Kind: cmp.PreviewEmpty}, nil
+	}
+	v, err := h.Call(ctx, "getcompletion", word, "help")
+	if err != nil {
+		return cmp.Preview{}, err
+	}
+	if len(asList(v)) == 0 {
+		return cmp.Preview{Kind: cmp.PreviewEmpty}, nil
+	}
+	return cmp.Preview{Kind: cmp.PreviewHelp, Tag: word}, nil
 }
 
 // trimCommonPrefix is ddc-source-cmdline's adjustment of what

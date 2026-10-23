@@ -106,3 +106,33 @@ func TestInsertModeContinuation(t *testing.T) {
 		t.Errorf("words = %q", words)
 	}
 }
+
+// An item with help previews it, by the word the source made.
+func TestPreview(t *testing.T) {
+	h := &cmptest.Host{Funcs: map[string]func(...any) (any, error){
+		"getcompletion": func(a ...any) (any, error) {
+			if a[1] != "help" {
+				t.Errorf("getcompletion type = %v", a[1])
+			}
+			if a[0] == "number" {
+				return []any{"number", "numberwidth"}, nil
+			}
+			return []any{}, nil
+		},
+	}}
+	p := New().(cmp.Previewer)
+	for _, tc := range []struct {
+		item cmp.Item
+		want cmp.Preview
+	}{
+		{cmp.Item{Word: "number", UserData: "number"}, cmp.Preview{Kind: cmp.PreviewHelp, Tag: "number"}},
+		// Another source put "set " in front of the word.
+		{cmp.Item{Word: "set number", UserData: "number"}, cmp.Preview{Kind: cmp.PreviewHelp, Tag: "number"}},
+		{cmp.Item{Word: "nohelp", UserData: "nohelp"}, cmp.Preview{Kind: cmp.PreviewEmpty}},
+	} {
+		got, err := p.Preview(context.Background(), h, cmp.DoneArgs{Context: cmdline("set ", ":"), Item: tc.item})
+		if err != nil || !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%+v: %+v, %v; want %+v", tc.item, got, err, tc.want)
+		}
+	}
+}

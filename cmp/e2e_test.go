@@ -20,6 +20,7 @@ type dump struct {
 	Left    bool     `json:"left"` // User GodaCmpCmdlineLeave
 	Error   string   `json:"error"`
 	Buffer  any      `json:"buffer"`
+	Preview string   `json:"preview"` // the 'buftype' of pum.vim's preview
 }
 
 // TestRealEditor types into an actual Vim (in a pseudo terminal) with a binary
@@ -485,6 +486,9 @@ func TestRealCmdline(t *testing.T) {
 					  ["\u001b", 0.3],
 					  [":", 0.5], ["set filety", 1.5], ["\u000e", 0.8], ["\u001d", 0.3],
 					  ["\u0019", 0.8], ["\u001d", 0.3],
+					  ["\u001b", 0.3],
+					  [":", 0.5], ["let g:hist_marker = 1\r", 0.5],
+					  [":", 0.5], ["let g:hist_m", 1.5], ["\u001d", 0.3],
 					  ["\u001b", 0.3]
 					]`
 				}
@@ -536,6 +540,17 @@ func TestRealCmdline(t *testing.T) {
 					if ds[4].Cmdline != "set filetype" || ds[4].Visible {
 						t.Errorf("after Ctrl-Y: %+v", ds[4])
 					}
+					// The cmdline source previews the help of "filetype"
+					// (with a pum.vim that has the previewer option).
+					if previewer(t, pumDir) && ds[3].Preview != "help" {
+						t.Errorf("no help preview after Ctrl-N: %+v", ds[3])
+					}
+					// The command run before is offered by the history
+					// source, from the word under the cursor on.
+					i := slices.IndexFunc(ds, func(d dump) bool { return d.Cmdline == "let g:hist_m" })
+					if i < 0 || !ds[i].Visible || !slices.Contains(ds[i].Words, "hist_marker = 1") {
+						t.Errorf(`":let g:hist_m": %+v`, ds)
+					}
 				}
 			})
 		}
@@ -543,6 +558,19 @@ func TestRealCmdline(t *testing.T) {
 }
 
 // supportsPum reports whether the editor is new enough for pum.vim.
+// previewer reports whether the pum.vim in dir has the previewer option.
+func previewer(t *testing.T, dir string) bool {
+	b, err := os.ReadFile(filepath.Join(dir, "autoload", "pum.vim"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(b), "previewer:") {
+		t.Log("pum.vim has no previewer option: the preview is not checked")
+		return false
+	}
+	return true
+}
+
 func supportsPum(ed e2e.Editor) bool {
 	script := filepath.Join(os.TempDir(), "goda-cmp-pumcheck.vim")
 	if err := os.WriteFile(script, []byte("if has('patch-9.1.0448') || has('nvim-0.10')\n  qa!\nendif\ncq!\n"), 0o644); err != nil {

@@ -429,6 +429,24 @@ function! goda_cmp#hide() abort
   endif
 endfunction
 
+" What the source of ITEM shows for it in a preview window, in ddc.vim's
+" previewer format ({'kind': 'empty'} when it shows nothing, for instance for
+" an item that is not goda-cmp's). For pum.vim:
+"   call pum#set_option('previewer', 'goda_cmp#get_previewer')
+function! goda_cmp#get_previewer(item) abort
+  let ref = s:ref(a:item)
+  if ref ==# '' || !exists('s:enabled') || !goda#is_running('cmp')
+    return {'kind': 'empty'}
+  endif
+  try
+    let previewer = goda#request('cmp', 'preview', ref)
+  catch
+    " An old list, a slow source: there is just no preview.
+    return {'kind': 'empty'}
+  endtry
+  return type(previewer) == v:t_dict ? previewer : {'kind': 'empty'}
+endfunction
+
 " ---------------------------------------------------------------------------
 " Receivers for the Vim script of UIs. They are the only way an extension's
 " Vim script reaches the core.

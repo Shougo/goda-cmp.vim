@@ -228,6 +228,37 @@ type Resolver interface {
 	Resolve(ctx context.Context, h sdk.Host, a DoneArgs) (Item, error)
 }
 
+// Preview is what a Previewer shows for an item, in ddc.vim's previewer
+// format: a UI that has a preview window (pum.vim, through
+// goda_cmp#get_previewer()) shows it. Kind is one of the Preview* constants.
+type Preview struct {
+	Kind string `json:"kind"`
+	// Tag is the help tag shown for PreviewHelp.
+	Tag string `json:"tag,omitempty"`
+	// Contents are the lines of PreviewText and PreviewMarkdown.
+	Contents []string `json:"contents,omitempty"`
+	// Command is the Ex command run in the preview window for
+	// PreviewCommand.
+	Command string `json:"command,omitempty"`
+}
+
+// The kinds of Preview.
+const (
+	PreviewEmpty    = "empty" // nothing: the UI shows the item's Info
+	PreviewHelp     = "help"
+	PreviewText     = "text"
+	PreviewMarkdown = "markdown"
+	PreviewCommand  = "command"
+)
+
+// Previewer is implemented by sources that can show more about an item than
+// its Info: the help of a command, the contents of a file. Preview is asked
+// when the UI opens its preview window for the item; an empty Kind counts as
+// PreviewEmpty.
+type Previewer interface {
+	Preview(ctx context.Context, h sdk.Host, a DoneArgs) (Preview, error)
+}
+
 // FilterInput is what a Filter works on.
 type FilterInput struct {
 	Context *Context
@@ -235,6 +266,10 @@ type FilterInput struct {
 	// Context.Input[start:] for the source being processed.
 	Complete string
 	Items    []Item
+	// Host reaches the editor, for filters that need it (a sorter that
+	// ranks by the command-line history). It is nil when the filter is
+	// called outside the engine, in tests for instance.
+	Host sdk.Host
 }
 
 // Filter transforms a list of candidates: it may drop (matcher), reorder

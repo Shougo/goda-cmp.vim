@@ -142,7 +142,7 @@ func (r *runner) merge() ([]Item, int, []string) {
 	}
 	if len(r.cfg.PostFilters) > 0 {
 		var err error
-		merged, err = r.e.chain(context.Background(), r.c, r.c.Input[minStart:], merged, r.cfg.PostFilters, r.timeout)
+		merged, err = r.e.chain(context.Background(), r.h, r.c, r.c.Input[minStart:], merged, r.cfg.PostFilters, r.timeout)
 		if err != nil {
 			log.Printf("cmp: postFilters: %v", err)
 		}
@@ -242,15 +242,15 @@ func (r *runner) gatherOne(ctx context.Context, i int) {
 			}
 		}
 		// The cap applies after sorting, so the best candidates survive.
-		items, err := e.chain(sctx, c, complete, items, opt.Matchers, r.timeout)
+		items, err := e.chain(sctx, r.h, c, complete, items, opt.Matchers, r.timeout)
 		if err == nil {
-			items, err = e.chain(sctx, c, complete, items, opt.Sorters, r.timeout)
+			items, err = e.chain(sctx, r.h, c, complete, items, opt.Sorters, r.timeout)
 		}
 		if err == nil {
 			if m := deref(opt.MaxItems, 0); m > 0 && len(items) > m {
 				items = items[:m]
 			}
-			items, err = e.chain(sctx, c, complete, items, opt.Converters, r.timeout)
+			items, err = e.chain(sctx, r.h, c, complete, items, opt.Converters, r.timeout)
 		}
 		if err != nil {
 			log.Printf("cmp: source %s: %v", name, err)
@@ -291,7 +291,7 @@ func (r *runner) gatherOne(ctx context.Context, i int) {
 
 // chain applies filters in order. A failing filter aborts the chain with its
 // error.
-func (e *engine) chain(ctx context.Context, c *Context, complete string, items []Item, names []string, timeout time.Duration) ([]Item, error) {
+func (e *engine) chain(ctx context.Context, h sdk.Host, c *Context, complete string, items []Item, names []string, timeout time.Duration) ([]Item, error) {
 	for _, n := range names {
 		if len(items) == 0 {
 			return items, nil
@@ -299,7 +299,7 @@ func (e *engine) chain(ctx context.Context, c *Context, complete string, items [
 		f := e.b.filters[n]
 		fctx, cancel := context.WithTimeout(ctx, timeout)
 		out, err := sdk.Guard(fctx, func() ([]Item, error) {
-			return f.Filter(fctx, FilterInput{Context: c, Complete: complete, Items: items})
+			return f.Filter(fctx, FilterInput{Context: c, Complete: complete, Items: items, Host: h})
 		})
 		cancel()
 		if err != nil {

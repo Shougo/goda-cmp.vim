@@ -89,6 +89,10 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 		// select(ref): the user moved to this item; resolves it and tells
 		// the Vim side through goda_cmp#_resolved. Meant as a notification.
 		"select": e.selectItem,
+		// preview(ref) -> previewer: what the source's Previewer shows for
+		// the item ({"kind": "empty"} when it has none), in ddc.vim's
+		// previewer format. See goda_cmp#get_previewer().
+		"preview": e.preview,
 		// events() -> [{event, filetypes}]: the autocmd events the sources
 		// want (see EventHandler), for the Vim side to listen to.
 		"events": e.eventsHandler,
@@ -362,6 +366,31 @@ func (e *engine) selectItem(ctx context.Context, h sdk.Host, params []any) (any,
 		log.Printf("cmp: ui %s: updateInfo: %v", sh.ui.Name(), err)
 	}
 	return nil, err
+}
+
+func (e *engine) preview(ctx context.Context, h sdk.Host, params []any) (any, error) {
+	empty := map[string]any{"kind": PreviewEmpty}
+	it, sh, err := e.lookup(params)
+	if err != nil {
+		return nil, err
+	}
+	p, ok := e.b.sources[it.Source].(Previewer)
+	if !ok {
+		return empty, nil
+	}
+	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
+	defer cancel()
+	pv, err := sdk.Guard(ctx, func() (Preview, error) {
+		return p.Preview(ctx, h, DoneArgs{Context: sh.c, Item: it})
+	})
+	if err != nil {
+		log.Printf("cmp: source %s: preview: %v", it.Source, err)
+		return nil, err
+	}
+	if pv.Kind == "" {
+		pv.Kind = PreviewEmpty
+	}
+	return sdk.Generic(pv)
 }
 
 func splitRef(ref string) (int64, int, bool) {
