@@ -44,7 +44,7 @@ func configure(b *cmp.Builder) {
 			"/": {"around", "line"},
 			"?": {"around", "line"},
 			"-": {"around", "line"},
-			// "=" (the expression register) is not completed by goda-cmp.
+			"=": {"input"},
 		},
 		SourceOptions: map[string]cmp.SourceOption{
 			"_": {

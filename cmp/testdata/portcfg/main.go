@@ -50,7 +50,7 @@ func main() {
 			return "pum", nil
 		},
 		Sources:        []string{"around", "buffer", "register", "file"},
-		CmdlineSources: map[string][]string{"@": {"input"}},
+		CmdlineSources: map[string][]string{"@": {"input"}, "=": {"input"}},
 		SourceOptions: map[string]cmp.SourceOption{
 			"_": {
 				IgnoreCase: new(true),

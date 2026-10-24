@@ -303,6 +303,11 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 	e.cancel = cancel
 	e.mu.Unlock()
 
+	// Nothing to complete (a command-line type without sources, input()
+	// for instance): nothing to show either, whatever the UI.
+	if len(cfg.Sources) == 0 {
+		return nil, nil
+	}
 	// The UI must be able to show candidates in the mode (ModesUI). No
 	// mode is insert mode (an older Vim side).
 	mode := c.Mode
@@ -311,9 +316,6 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 	}
 	if !slices.Contains(uiModes(ui), mode) {
 		return nil, fmt.Errorf("ui %q cannot show candidates %s", cfg.UI, modeName(mode))
-	}
-	if len(cfg.Sources) == 0 {
-		return nil, nil
 	}
 	for _, s := range cfg.Sources {
 		if _, _, err := e.source(cfg, al, s); err != nil {

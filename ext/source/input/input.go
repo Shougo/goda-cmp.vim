@@ -5,8 +5,8 @@
 //
 //	CmdlineSources: map[string][]string{"@": {"input"}, "=": {"input"}},
 //
-// goda_cmp#enable_cmdline() does not complete "=" (the expression register);
-// "@" works when input() was called with a completion type.
+// They are completed without goda_cmp#enable_cmdline(). For "@", input()
+// must have been given a completion type.
 package input
 
 import (

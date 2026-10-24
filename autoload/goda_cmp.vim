@@ -123,6 +123,13 @@ function! goda_cmp#enable() abort
     " The events of autoCompleteEvents are listened to as the settings of
     " a buffer become known.
     autocmd BufEnter,FileType * call s:register_events()
+    " input() and the expression register are completed without
+    " goda_cmp#enable_cmdline(), as in ddc.vim (with their sources in
+    " cmdlineSources["@"] and ["="]).
+    autocmd CmdlineChanged * if s:input_cmdline()
+          \ | call s:on_change('CmdlineChanged') | endif
+    autocmd CmdlineLeave * if s:input_cmdline()
+          \ | call goda_cmp#hide('CmdlineLeave') | endif
   augroup END
   call s:register_events()
   call s:setup_events()
@@ -181,8 +188,8 @@ function! goda_cmp#enable_cmdline() abort
   augroup goda_cmp_cmdline
     autocmd!
     autocmd CmdlineEnter * call s:on_change('CmdlineEnter')
-    " "=": the expression register, where completing is no help.
-    autocmd CmdlineChanged * if getcmdtype() !=# '='
+    " input() and the expression register: see goda_cmp#enable().
+    autocmd CmdlineChanged * if getcmdtype() !~# '^[@=]$'
           \ | call s:on_change('CmdlineChanged') | endif
     autocmd CmdlineLeave * call s:cmdline_leave()
   augroup END
@@ -467,11 +474,16 @@ endfunction
 function! s:mode() abort
   let m = mode()
   if m ==# 'c'
-    return exists('s:cmdline') ? 'c' : ''
+    return exists('s:cmdline') || getcmdtype() =~# '^[@=]$' ? 'c' : ''
   elseif m ==# 't'
     return exists('s:terminal') ? 't' : ''
   endif
   return m =~# '^i' ? 'i' : ''
+endfunction
+
+" input() or the expression register, outside goda_cmp#enable_cmdline().
+function! s:input_cmdline() abort
+  return !exists('s:cmdline') && getcmdtype() =~# '^[@=]$'
 endfunction
 
 function! s:cmdline() abort

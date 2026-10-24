@@ -644,3 +644,20 @@ func TestModesUI(t *testing.T) {
 		}
 	}
 }
+
+// input() is completed without goda_cmp#enable_cmdline(): with no sources for
+// its type, it is no error, even with a UI that cannot show there.
+func TestCmdlineTypeWithoutSources(t *testing.T) {
+	b := newBuilder()
+	b.AddSource(fakeSource{name: "a", items: []string{"x"}})
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "native"})
+	h := uiHost()
+	c := ctxMap(1, "x", "")
+	c["mode"], c["cmdtype"] = "c", "@"
+	if err := completeErr(t, b, h, c); err != nil {
+		t.Errorf("input() without sources: %v", err)
+	}
+	if len(h.Calls()) != 0 {
+		t.Errorf("calls: %v", h.Calls())
+	}
+}

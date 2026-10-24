@@ -784,11 +784,12 @@ func TestRealPorts(t *testing.T) {
 		  ["\u001bo", 0.3], ["registerw", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
 		  ["\u001bo", 0.3], ["./foo_", 1.5], ["\u001d", 0.3],
 		  ["\u001b", 0.5],
-		  [":call goda_cmp#enable_cmdline() | let g:r = input('> ', '', 'file')\r", 0.8],
+		  [":let g:r = input('> ', '', 'file')\r", 0.8],
 		  ["foo_f", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
 		  ["\u001b", 0.3],
 		  [":hide edit x.vim\r", 0.5], ["iset filety", 1.5], ["\u001d", 0.3], ["\u0007", 0.8], ["\u001d", 0.3],
-		  ["\u001b", 0.3]
+		  ["\u001bo", 0.3], ["\u0012=", 0.5], ["strle", 1.5], ["\u001d", 0.3],
+		  ["\u001b", 0.3], ["\u001b", 0.3]
 		]`
 		ds := runDriverIn(t, dir, ed, bin, repo, godaRoot, "t.txt", steps, "PUM_RTP="+pumDir, "GODA_PORTS=1")
 		if len(ds) < 9 {
@@ -806,6 +807,7 @@ func TestRealPorts(t *testing.T) {
 		if d := ds[6]; !d.Visible || !slices.Contains(d.Words, "foo_file.txt") || !slices.Contains(d.Words, "foo_dir") {
 			t.Errorf(`"./foo_": %+v`, d)
 		}
+		// input(), without goda_cmp#enable_cmdline().
 		if d := ds[7]; !d.Inline || d.Cmdline != "foo_f" {
 			t.Errorf(`input() "foo_f": %+v`, d)
 		}
@@ -821,6 +823,14 @@ func TestRealPorts(t *testing.T) {
 		}
 		if d := ds[10]; d.Line != "set filetype" {
 			t.Errorf(`"set filety" after Ctrl-G: %+v`, d)
+		}
+		// The expression register (Ctrl-R =), without
+		// goda_cmp#enable_cmdline().
+		if len(ds) < 12 {
+			t.Fatalf("got %d records, want 12", len(ds))
+		}
+		if d := ds[11]; d.Cmdline != "strle" || (!d.Inline && !slices.Contains(d.Words, "strlen(")) {
+			t.Errorf(`"=strle": %+v`, d)
 		}
 	})
 }
