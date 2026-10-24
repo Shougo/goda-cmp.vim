@@ -82,17 +82,6 @@ installed. CI (`.github/workflows/ci.yml`) installs all of them. They build
 against goda.vim as a sibling directory (`../goda.vim`), and are skipped
 without it.
 
-## Not implemented
-
-Compared with ddc.vim: `ddc#callback()`, `ddc#register()` and
-`ddc#custom#load_config()` (extensions are Go packages linked into the binary),
-`matcherConcurrency` and the filter option `parallelSafe` (filters run as Go
-code), `uiOptions` and `filterOptions` (ddc.vim defines none), and
-`ddc#custom#set_context_*()` from Vim script (`Config.DynamicConfig` in Go
-does it). Command-line and terminal completion are there
-(`:help goda-cmp-cmdline`, `:help goda-cmp-terminal`); previews need a pum.vim
-with its `previewer` option (`:help goda-cmp-preview`).
-
 ## License
 
 MIT, see LICENSE.
