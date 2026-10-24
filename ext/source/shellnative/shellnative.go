@@ -51,6 +51,10 @@ type state struct {
 	out  chan []string
 	cwd  string
 	dead chan struct{}
+	// stale counts the answers still to come for requests that gave up
+	// waiting (superseded, or too slow): each answer is for the oldest
+	// question, so they are read and dropped first.
+	stale int
 }
 
 // New returns the source, named "shellnative".
@@ -131,7 +135,7 @@ func (s source) Init(ctx context.Context, h sdk.Host) error {
 		os.RemoveAll(dir)
 		return fmt.Errorf("cannot start %s: %w", s.p.Shell, err)
 	}
-	out := make(chan []string, 1)
+	out := make(chan []string, 16)
 	dead := make(chan struct{})
 	go func() {
 		defer close(dead)
@@ -140,10 +144,7 @@ func (s source) Init(ctx context.Context, h sdk.Host) error {
 		var lines []string
 		for sc.Scan() {
 			if sc.Text() == "\x01EOC\x01" {
-				select {
-				case out <- lines:
-				default:
-				}
+				out <- lines
 				lines = nil
 				continue
 			}
@@ -191,10 +192,17 @@ func (s source) complete(ctx context.Context, input, cwd string) ([]string, erro
 		msg.WriteString("chdir:" + cwd + "\n")
 	}
 	msg.WriteString("input:" + strings.ReplaceAll(input, "\n", " ") + "\n")
-	// An answer the previous request did not wait for is dropped.
-	select {
-	case <-s.st.out:
-	default:
+	// The answers of earlier requests that gave up come first.
+	for s.st.stale > 0 {
+		select {
+		case <-s.st.out:
+			s.st.stale--
+		case <-s.st.dead:
+			s.st.cmd = nil
+			return nil, fmt.Errorf("the shell exited")
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
 	}
 	if _, err := io.WriteString(s.st.in, msg.String()); err != nil {
 		return nil, err
@@ -206,6 +214,7 @@ func (s source) complete(ctx context.Context, input, cwd string) ([]string, erro
 		s.st.cmd = nil
 		return nil, fmt.Errorf("the shell exited")
 	case <-ctx.Done():
+		s.st.stale++
 		return nil, ctx.Err()
 	}
 }

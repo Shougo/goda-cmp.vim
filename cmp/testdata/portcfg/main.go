@@ -66,6 +66,10 @@ func main() {
 				MinAutoCompleteLength:  new(3),
 				IsVolatile:             new(true),
 				KeywordPattern:         `[0-9a-zA-Z_./#:-]*`,
+				// zsh starts (and builds its completion dump) on the first
+				// request: slow on a loaded CI machine.
+				HideTimeout: new(3000),
+				Timeout:     new(10000),
 			},
 		},
 		PostFilters:       []string{"sorterhead"},

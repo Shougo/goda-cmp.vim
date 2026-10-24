@@ -860,10 +860,10 @@ func TestRealShellNative(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(dir, "t.txt"), []byte("x\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// The first answer of zsh may be slower than hideTimeout: a second
-		// keystroke asks again.
+		// The first request starts zsh, which may take a while on a loaded
+		// machine; the next keystrokes ask again.
 		steps := `[
-		  [":GodaTerm\r", 2.0], ["printf ok; ec", 2.5], ["h", 1.5], ["\u001d", 0.3],
+		  [":GodaTerm\r", 2.0], ["printf ok; e", 5.0], ["c", 2.0], ["h", 2.5], ["\u001d", 0.3],
 		  ["\u001c\u000e", 0.3]
 		]`
 		ds := runDriverIn(t, dir, ed, bin, repo, godaRoot, "t.txt", steps,
