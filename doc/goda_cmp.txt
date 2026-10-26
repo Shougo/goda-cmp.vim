@@ -1,4 +1,4 @@
-*goda_cmp.txt*	Completion for Vim/Neovim on goda.vim
+*goda_cmp.txt*	Completion framework for Vim/Neovim on goda.vim
 
 License: MIT license
 
@@ -157,12 +157,12 @@ goda_cmp#alias({type}, {alias}, {base})
 	      \   sourceOptions: #{ around_long: #{ mark: 'A+' } },
 	      \ })
 <
-                                                 *goda_cmp#enable_terminal()*
+                                                  *goda_cmp#enable_terminal()*
 goda_cmp#enable_terminal()
 		Complete in terminal buffers too; see |goda-cmp-terminal|.
 		Enables goda-cmp first if needed.
 
-                                                *goda_cmp#disable_terminal()*
+                                                 *goda_cmp#disable_terminal()*
 goda_cmp#disable_terminal()
 		Stop completing in terminal buffers.
 
@@ -238,7 +238,7 @@ goda_cmp#map#insert_item({index})
 	inoremap <expr> <C-x>1 goda_cmp#map#insert_item(0)
 <
 ------------------------------------------------------------------------------
-SYNTAX                                              *goda-cmp-syntax-functions*
+SYNTAX                                             *goda-cmp-syntax-functions*
 
 For enabledIf and for Config.DynamicConfig (through h.Call), as
 ddc#syntax#*().
@@ -477,8 +477,8 @@ EXTENSIONS                                                *goda-cmp-extension*
 
 An extension is a Go module implementing an interface of package `cmp` and
 exporting a constructor.  `Source` has `Name` and `Gather`; `Filter` has
-`Name` and `Filter`; `UI` has `Name`, `Show` and `Hide`.  A source that fails, panics or times out is skipped for
-that request; the others still answer.
+`Name` and `Filter`; `UI` has `Name`, `Show` and `Hide`.  A source that fails,
+panics or times out is skipped for that request; the others still answer.
 
 A source for a language server can implement more.  The engine looks for each
 interface with a type assertion, so extensions written without them keep
@@ -579,9 +579,9 @@ version 1.0 they move out of it: each UI to a repository of its own (a UI
 with Vim script is installed as a Vim plugin), and the sources and filters
 together to one repository (Go packages only, imported by the
 configuration; one that grows large may get a repository of its own
-later).  The import paths change then.  Their parameters are the original's, as fields of `Params`
-with the original's names in JSON (|goda-cmp-params|); the package
-documentation of each (`go doc`) has the details.
+later).  The import paths change then.  Their parameters are the original's,
+as fields of `Params` with the original's names in JSON (|goda-cmp-params|);
+the package documentation of each (`go doc`) has the details.
 
 UIs~
 	native		Vim's popup menu (ddc-ui-native)
@@ -697,10 +697,10 @@ completed without goda_cmp#enable_cmdline(), whatever opens them, when "@" and
 `Context.CmdType` and the command line before the cursor as `Input`
 (`NextInput` is the text after it, in all modes).
 
-The UI must be able to show candidates there (`cmp.ModesUI` with "c"): "pum" can,
-"native" cannot, since |complete()| works in insert mode only.  With
-`CmdlineSources` set and a UI that cannot, the binary reports a
-configuration error.  The UI can be chosen per filetype, as usual.
+The UI must be able to show candidates there (`cmp.ModesUI` with "c"): "pum"
+can, "native" cannot, since |complete()| works in insert mode only.  With
+`CmdlineSources` set and a UI that cannot, the binary reports a configuration
+error.  The UI can be chosen per filetype, as usual.
 
 `ext/source/cmdline` (a port of ddc-source-cmdline) offers what
 |getcompletion()| does for the command line.  Put "fuzzy" in 'wildoptions'
@@ -742,8 +742,8 @@ nothing and the sorter keeps the order.
 TERMINAL                                                   *goda-cmp-terminal*
 
 Completion in |terminal| buffers works as in ddc.vim: enable it, use a UI that
-can show candidates there (`cmp.ModesUI` with "t": "pum"), and allow completion in
-special buffers: >vim
+can show candidates there (`cmp.ModesUI` with "t": "pum"), and allow
+completion in special buffers: >vim
 
 	call goda_cmp#enable_terminal()
 	call goda_cmp#patch_global(#{
@@ -770,8 +770,8 @@ preview window, in the format of ddc.vim's previewers (`cmp.Preview`): the
 help of a tag, lines of text or markdown, or a command run in the window.
 The cmdline source shows the help of an item.  The engine has no window of
 its own: a UI that has one asks |goda_cmp#get_previewer()|.  pum.vim does,
-with its preview option and its `previewer` option (a pum.vim that has it): >vim
-
+with its preview option and its `previewer` option (a pum.vim that has it):
+>vim
 	call pum#set_option(#{
 	      \   preview: v:true,
 	      \   previewer: 'goda_cmp#get_previewer',
