@@ -792,15 +792,21 @@ function! goda_cmp#_done(item, reason) abort
     return
   endif
   " Accepting inserted nothing new: the TextChangedI that may follow must not
-  " start another completion for the word that was just completed.
-  if s:timer != -1
-    call timer_stop(s:timer)
-    let s:timer = -1
+  " start another completion for the word that was just completed. But a UI
+  " may tell it late, after more was typed (pum.vim closing its popup on the
+  " next key, "/" after a directory): what was typed since is completed.
+  let word = get(a:item, 'word', '')
+  let input = s:input()
+  if type(word) != v:t_string || strpart(input, len(input) - len(word)) ==# word
+    if s:timer != -1
+      call timer_stop(s:timer)
+      let s:timer = -1
+    endif
+    let s:last = s:key()
+    let s:accepted = [s:last[0], s:last[2]]
+    let s:prev_input = s:last[2]
+    let s:items = {}
   endif
-  let s:last = s:key()
-  let s:accepted = [s:last[0], s:last[2]]
-  let s:prev_input = s:last[2]
-  let s:items = {}
   if a:reason !=# 'cancel' && goda#is_running('cmp')
     call goda#notify('cmp', 'done', ref)
   endif

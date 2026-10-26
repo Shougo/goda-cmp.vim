@@ -111,6 +111,35 @@ func TestRealCmdline(t *testing.T) {
 	})
 }
 
+// TestRealLateDone: an item the UI says was accepted only after more was
+// typed does not cancel the completion of what was typed.
+func TestRealLateDone(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	bin := e2e.BuildConfig(t, "testdata/corecfg")
+	vimrc, _ := filepath.Abs("testdata/latedone.vim")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		text := filepath.Join(t.TempDir(), "text.txt")
+		if err := os.WriteFile(text, []byte("foobarxyz\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// "foobar" accepted, then "x" typed: told after the "x".
+		steps := `[
+		  ["o", 0.3], ["foobarx", 0.1], ["\u0018d", 1.5], ["\u001d", 0.3],
+		  ["\u001b", 0.3]
+		]`
+		ds := e2e.Drive(t, ed, e2e.Options{Bin: bin, File: text, Steps: steps, Vimrc: vimrc,
+			Env: []string{"GODA_DUMP_UI=test"}})
+		if len(ds) < 1 {
+			t.Fatal("nothing recorded")
+		}
+		if !ds[0].Visible || !slices.Equal(ds[0].Words, []string{"foobarxyz"}) {
+			t.Errorf(`"foobarx": %+v`, ds[0])
+		}
+	})
+}
+
 // TestRealTerminal completes in a terminal buffer.
 func TestRealTerminal(t *testing.T) {
 	if testing.Short() {
