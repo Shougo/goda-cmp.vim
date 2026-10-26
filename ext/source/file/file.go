@@ -1,8 +1,9 @@
 // Package file is a completion source for file names, looked up from the
 // current directory, the directory of the buffer and their project roots. It
 // is a port of ddc-source-file (https://github.com/LumaKernel/ddc-source-file,
-// MIT License, Copyright (c) 2021 Luma); its Vim script is
-// autoload/goda_cmp/source/file.vim.
+// MIT License, Copyright (c) 2021 Luma). It has no Vim script: the patterns
+// that need Vim's character classes ('isfname', 'iskeyword') are sent as one
+// expression.
 //
 // The menu of an item says where it was found: "cwd", "buf", and "cwd^" or
 // "buf^" for a project root (found by ProjMarkers), "cwd^2" for the next one
@@ -184,27 +185,22 @@ var envPrefix = regexp.MustCompile(`(?i)^(?:\$(?:env:)?(\w+)|%(\w+)%)[/\\]`)
 func (s source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathered, error) {
 	p := s.p
 	pm := s.paths()
-	v, err := h.Eval(ctx, "[goda_cmp#source#file#get_pos("+vimString(c.Input)+", "+vimString(p.FilenameChars)+"), "+
-		"goda_cmp#source#file#info("+vimString(c.Input)+", "+vimString(p.FilenameChars)+", "+boolExpr(pm.sep == "/")+"), getcwd()]")
+	v, err := h.Eval(ctx, infoExpr(c.Input, p.FilenameChars, pm.sep == "/"))
 	if err != nil {
 		return cmp.Gathered{}, err
 	}
 	l, _ := v.([]any)
-	if len(l) != 3 {
+	if len(l) != 5 {
 		return cmp.Gathered{Start: len(c.Input)}, nil
 	}
 	start := toInt(l[0])
 	if start < 0 || start > len(c.Input) {
 		start = len(c.Input)
 	}
-	info, _ := l[1].([]any)
-	cwd, _ := l[2].(string)
-	if len(info) != 3 {
-		return cmp.Gathered{Start: start}, nil
-	}
-	full, _ := info[0].(string)
-	basePrefix, _ := info[1].(string)
-	bufPath, _ := info[2].(string)
+	full, _ := l[1].(string)
+	basePrefix, _ := l[2].(string)
+	bufPath, _ := l[3].(string)
+	cwd, _ := l[4].(string)
 
 	expanded := s.expand(ctx, h, full, pm)
 	inputDir := expanded
@@ -370,14 +366,29 @@ func (s source) expand(ctx context.Context, h sdk.Host, full string, pm paths) s
 	return full
 }
 
-func vimString(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
-
-func boolExpr(b bool) string {
-	if b {
-		return "v:true"
+// infoExpr is the Vim expression for what is before the cursor, in the terms
+// of 'isfname' and chars (a collection of 'iskeyword' and others), as the
+// Vim script of ddc-source-file finds it: [the start of the completed part,
+// the path typed, the part of its file name before chars, the path of the
+// buffer, the current directory].
+func infoExpr(input, chars string, posix bool) string {
+	// The separator, escaped as an atom and in a collection.
+	sep, inColl := `\\`, `\\`
+	if posix {
+		sep, inColl = `\/`, "/"
 	}
-	return "v:false"
+	// The path: file name characters and separators, maybe after "$" or
+	// "$env:".
+	fullPat := `\c\%(^\$\%(env:\)\?\)\?[[:fname:]` + inColl + `]*$`
+	// What is before chars in the last part of the path.
+	basePat := `\%(.*` + sep + `\|^\)\(.*[^` + chars + inColl + `]\)[` + chars + `]*$`
+	in := vimString(input)
+	full := "matchstr(" + in + ", " + vimString(fullPat) + ")"
+	return "[match(" + in + ", " + vimString("["+chars+"]*$") + "), " + full + ", " +
+		"get(matchlist(" + full + ", " + vimString(basePat) + "), 1, ''), expand('%:p'), getcwd()]"
 }
+
+func vimString(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
 
 func toInt(v any) int {
 	switch n := v.(type) {
