@@ -1,0 +1,97 @@
+*goda-cmp-ui-native.txt*	Vim's popup menu UI for goda-cmp.vim
+
+Author: Shougo <Shougo.Matsu at gmail.com>
+License: MIT license
+
+CONTENTS                                         *goda-cmp-ui-native-contents*
+
+Introduction		|goda-cmp-ui-native-introduction|
+Install			|goda-cmp-ui-native-install|
+Examples		|goda-cmp-ui-native-examples|
+Params			|goda-cmp-ui-native-params|
+Limitations		|goda-cmp-ui-native-limitations|
+
+
+==============================================================================
+INTRODUCTION                                 *goda-cmp-ui-native-introduction*
+
+This UI shows the candidates in Vim's own popup menu (|complete()|).  It is a
+port of ddc-ui-native.
+
+It shows them in insert mode only: |complete()| does not work on the command
+line or in a terminal.  Use another UI there, such as "pum"
+(|goda-cmp-ui-pum.txt|).
+
+You need not set 'completeopt': while insert mode lasts, the UI takes
+"longest", "noinsert" and "noselect" out of it and adds "menuone", so that
+nothing is inserted until you select; your value is put back when you leave
+insert mode.  The other values ("popup", "preview", ...) are kept.
+
+The usual keys select and accept: >
+	<C-n> <C-p>	select the next / previous candidate (and insert it)
+	<C-y>		accept the selected candidate
+	<C-e>		cancel, restoring what you typed
+<
+The info a source adds when an item is selected (Resolve, for example the
+documentation from a language server) is shown only when 'completeopt' has
+"popup" and the item had an info to begin with.
+
+
+==============================================================================
+INSTALL                                           *goda-cmp-ui-native-install*
+
+Please install "goda.vim" and "goda-cmp.vim", and Go to build your
+configuration.
+
+https://github.com/Shougo/goda.vim
+https://github.com/Shougo/goda-cmp.vim
+
+The UI is the Go package "github.com/Shougo/goda-cmp.vim/ext/ui/native",
+which your configuration imports, with the Vim script of this plugin.
+
+NOTE: The package moves to a repository of its own for goda-cmp.vim 1.0, and
+its import path changes then.
+
+
+==============================================================================
+EXAMPLES                                         *goda-cmp-ui-native-examples*
+>go
+	import "github.com/Shougo/goda-cmp.vim/ext/ui/native"
+
+	b.AddUI(native.New())
+	b.PatchGlobal(cmp.Config{UI: "native"})
+<
+From Vim script, among the UIs your configuration added: >vim
+
+	call goda_cmp#patch_global(#{ ui: 'native' })
+<
+
+==============================================================================
+PARAMS                                             *goda-cmp-ui-native-params*
+
+The parameters are given to the constructor in Go
+(`native.New(native.Params{Insert: true})`) or set from Vim script with
+"uiParams" (|goda-cmp-params|).
+
+                                             *goda-cmp-ui-native-param-insert*
+insert		(boolean)
+		Insert the first item automatically.
+		It is useful for manual completion.
+
+		Default: v:false
+
+
+==============================================================================
+LIMITATIONS                                   *goda-cmp-ui-native-limitations*
+
+The popup is replaced as a whole with |complete()|, which drops the
+selection.  When a source sends its candidates in parts
+(|goda-cmp-partial|), later parts are added to the popup while nothing is
+selected; once you have selected a candidate, the parts that arrive later
+are not shown, so that the popup does not change under you.  Select nothing
+or press <C-e> and type again to see them.  The "pum" UI does not have this
+limitation.
+
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:noet:fen:noet:

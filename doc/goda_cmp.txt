@@ -447,23 +447,10 @@ The parameters of a name are merged by key across the settings.
 ==============================================================================
 SELECTING CANDIDATES                                         *goda-cmp-select*
 
-Nothing is inserted until you select a candidate.
-
-With the native popup the usual keys work:
-	<C-n> <C-p>	select the next / previous candidate (and insert it)
-	<C-y>		accept the selected candidate
-	<C-e>		cancel, restoring what you typed
-
-With pum.vim map the keys to its functions: >vim
-
-	inoremap <C-n> <Cmd>call pum#map#insert_relative(+1)<CR>
-	inoremap <C-p> <Cmd>call pum#map#insert_relative(-1)<CR>
-	inoremap <C-y> <Cmd>call pum#map#confirm()<CR>
-	inoremap <C-e> <Cmd>call pum#map#cancel()<CR>
-<
-You need not set 'completeopt': with the native popup goda-cmp makes sure
-that nothing is inserted until you select, and restores your value when you
-leave insert mode.
+Nothing is inserted until you select a candidate.  The keys depend on the
+UI: the usual ones (<C-n>, <C-p>, <C-y>, <C-e>) with the native popup
+(|goda-cmp-ui-native.txt|), the functions of pum.vim mapped to keys with the
+pum UI (|goda-cmp-ui-pum.txt|).
 
 ==============================================================================
 POPUP                                                         *goda-cmp-popup*
@@ -476,18 +463,14 @@ A UI is an extension, added like the others and chosen with `UI`: >go
 	b.AddUI(native.New())   // "native": Vim's popup menu
 	b.AddUI(pum.New())      // "pum": pum.vim, which must be installed
 <
-pum.vim is configured in Vim script as usual (`pum#set_option()`,
-`pum#map#...`).  The UI can differ per filetype, and can be switched from Vim
-script among the UIs that were added: `goda_cmp#patch_global({'ui': 'pum'})`.
-
-Both take the parameter `insert` (as ddc-ui-native and ddc-ui-pum): the first
-item is inserted when the popup opens, which suits manual completion.  In Go,
-`pum.New(pum.Params{Insert: true})`; from Vim script, `uiParams`
-(|goda-cmp-params|).
-
-`Resolve` (|goda-cmp-extension|) shows its result through
-`pum#update_current_item()` with pum.vim, and in the native popup only when
-'completeopt' has "popup" and the item already had an info.
+The UI can differ per filetype, and can be switched from Vim script among
+the UIs that were added: `goda_cmp#patch_global({'ui': 'pum'})`.  Each UI has
+its own documentation, its parameters (set with `uiParams`,
+|goda-cmp-params|) and the keys to use with it:
+	native		|goda-cmp-ui-native.txt|
+	pum		|goda-cmp-ui-pum.txt|
+	inline		|goda-cmp-ui-inline.txt|
+	none		|goda-cmp-ui-none.txt|
 
 ==============================================================================
 EXTENSIONS                                                *goda-cmp-extension*
@@ -605,7 +588,7 @@ UIs~
 	pum		pum.vim; insert mode, command line, terminal
 			(ddc-ui-pum)
 	inline		the first item as virtual text, for a single
-			candidate (ddc-ui-inline); see below
+			candidate (ddc-ui-inline)
 	none		shows nothing (ddc-ui-none)
 
 Sources~
@@ -655,25 +638,6 @@ Filters~
 			(ddc-filter-converter_remove_overlap)
 	convertertruncateabbr
 			shortens long labels
-
-Inline~
-The "inline" UI shows the first item after the cursor;
-`goda_cmp#ui#inline#visible()` tells whether it does, and
-|goda_cmp#map#insert_item()| inserts it.  With pum.vim for several items: >go
-
-	DynamicUI: func(_ context.Context, _ sdk.Host,
-	    a cmp.DynamicUIArgs) (string, error) {
-	    if a.Context.Mode != "t" && len(a.Items) == 1 {
-	        return "inline", nil
-	    }
-	    return "pum", nil
-	},
-< >vim
-	inoremap <expr> <Tab> goda_cmp#ui#inline#visible()
-	      \ ? goda_cmp#map#insert_item(0) : "\<Tab>"
-<
-When DynamicUI switches UIs, the one that showed the previous list is
-hidden.
 
 A configuration of all of these, translated from a ddc.vim user's, is in
 `examples/ddc` (Go, and its vimrc.vim).
@@ -824,12 +788,8 @@ source emitted before in the request.  While one is running, the popup is
 updated at most every `PartialInterval` milliseconds, and items emitted
 before a timeout are kept.
 
-Limitation of the native popup~
-The native popup is replaced as a whole with |complete()|, which drops the
-selection.  So while nothing is selected, later results are added to the
-popup; once you have selected a candidate, results that arrive later are not
-shown, so that the popup does not change under you.  Select nothing or press
-<C-e> and type again to see them.  pum.vim does not have this limitation.
+The native popup does not show the parts that arrive while a candidate is
+selected: see |goda-cmp-ui-native-limitations|.
 
 ==============================================================================
 LANGUAGE SERVERS                                                *goda-cmp-lsp*

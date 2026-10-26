@@ -1,0 +1,59 @@
+*goda-cmp-ui-none.txt*	None UI for goda-cmp.vim
+
+Author: Shougo <Shougo.Matsu at gmail.com>
+License: MIT license
+
+CONTENTS                                           *goda-cmp-ui-none-contents*
+
+Introduction		|goda-cmp-ui-none-introduction|
+Install			|goda-cmp-ui-none-install|
+Examples		|goda-cmp-ui-none-examples|
+Params			|goda-cmp-ui-none-params|
+
+
+==============================================================================
+INTRODUCTION                                   *goda-cmp-ui-none-introduction*
+
+This UI does not display items.  It is a port of ddc-ui-none.
+
+The items are still gathered, for the functions that use them without a
+popup, such as |goda_cmp#map#insert_item()| and
+|goda_cmp#map#complete_common_string()|.  It works in insert mode, on the
+command line and in a terminal.
+
+
+==============================================================================
+INSTALL                                             *goda-cmp-ui-none-install*
+
+Please install "goda.vim" and "goda-cmp.vim", and Go to build your
+configuration.
+
+https://github.com/Shougo/goda.vim
+https://github.com/Shougo/goda-cmp.vim
+
+The UI is the Go package "github.com/Shougo/goda-cmp.vim/ext/ui/none", which
+your configuration imports.  It has no Vim script.
+
+NOTE: The package moves to a repository of its own for goda-cmp.vim 1.0, and
+its import path changes then.
+
+
+==============================================================================
+EXAMPLES                                           *goda-cmp-ui-none-examples*
+>go
+	import "github.com/Shougo/goda-cmp.vim/ext/ui/none"
+
+	b.AddUI(none.New())
+	b.PatchGlobal(cmp.Config{UI: "none"})
+< >vim
+	inoremap <expr> <C-t> goda_cmp#map#insert_item(0)
+<
+
+==============================================================================
+PARAMS                                               *goda-cmp-ui-none-params*
+
+This UI has no parameters.
+
+
+==============================================================================
+vim:tw=78:ts=8:ft=help:norl:noet:fen:noet:
