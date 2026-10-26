@@ -59,7 +59,7 @@ script, is in [examples/ddc](examples/ddc).
                                   ports of ddc.vim extensions:
                                   source/around, source/lsp, source/file, ...
                                   (`:help goda-cmp-bundled`)
- goda-cmp-source-*, goda-cmp-filter-*   extensions (Go modules, own repositories)
+ other extensions                 Go packages from other repositories
         │
         ▼  go build  →  one binary, started by goda.vim (Vim or Neovim)
 ```

@@ -574,22 +574,29 @@ behave like Vim's, for sources that read or change buffers.
 particular one.  Package `cmp/cmptest/e2e` runs end-to-end tests in a real
 Vim or Neovim: it builds a configuration (`BuildConfig`), types keys into the
 editor in a pseudo terminal (`Drive`, Python 3 needed) and returns what the
-editor recorded.
+editor recorded.  `cmptest.NewWords()` (a source of the words of the
+buffer) and `cmptest.NewHead()` (a matcher) are for tests that need some
+source or matcher but not a particular one.
 
-Extensions of this project are named `goda-cmp-source-{name}` and
-`goda-cmp-filter-{name}`, with the package `{name}`, registered under the
-same name (`matcherhead.New()` is the filter "matcherhead"), and the
-constructor `New(Params)` (or `New()` when there is nothing to set).  The
-name says nothing about the kind: a filter is a matcher, a sorter or a
-converter by the list it is put in.
+An extension is a Go package `{name}`, registered under the same name
+(`matcherhead.New()` is the filter "matcherhead"), with the constructor
+`New(Params)` (or `New()` when there is nothing to set).  The name says
+nothing about the kind: a filter is a matcher, a sorter or a converter by
+the list it is put in.  Packages are what a configuration imports: a
+repository may hold one extension or many, and sources and filters that
+depend on each other (a sorter that reads what its source reads) are kept
+in the same one.
 
 ==============================================================================
 BUNDLED EXTENSIONS                                          *goda-cmp-bundled*
 
 These are in this repository, under `ext/`: ports of ddc.vim extensions,
-named as the originals without "_" ("matcher_head" is "matcherhead").  They
-will move to repositories of their own (goda-cmp-source-{name}, ...) for
-version 1.0.  Their parameters are the original's, as fields of `Params`
+named as the originals without "_" ("matcher_head" is "matcherhead").  For
+version 1.0 they move out of it: each UI to a repository of its own (a UI
+with Vim script is installed as a Vim plugin), and the sources and filters
+together to one repository (Go packages only, imported by the
+configuration; one that grows large may get a repository of its own
+later).  The import paths change then.  Their parameters are the original's, as fields of `Params`
 with the original's names in JSON (|goda-cmp-params|); the package
 documentation of each (`go doc`) has the details.
 
