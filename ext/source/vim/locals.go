@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	endFunction   = regexp.MustCompile(`\bendf` + optional("", "unction") + `\b`)
+	endFunction   = regexp.MustCompile(`\b(?:endf` + optional("", "unction") + `|enddef)\b`)
 	startFunction = regexp.MustCompile(`\b(?:` + optional("fu", "nction") + `|def)!?[ \t]+`)
 	declaration   = regexp.MustCompile(`\b(?:let|const|for|var|final)[ \t]+`)
 )
@@ -19,35 +19,35 @@ var (
 const chunk = 500
 
 // localVariables are the variables and arguments of the function the cursor
-// (at line lnum) is in, declared above it.
+// (at line lnum) is in, declared above it. The functions defined inside it
+// are skipped, and in such a function, only its own are found.
 func localVariables(ctx context.Context, h sdk.Host, lnum int) ([]cmp.Item, error) {
-	// The lines above the cursor, from first.
+	// The lines above the cursor, from first, asked for until the line
+	// that starts the function: the first start going up that no end
+	// below it closes.
 	var lines []string
 	first := lnum
 	start := 0
+	depth := 0
 	for start == 0 && first > 1 {
 		from := max(1, first-chunk)
 		v, err := h.Call(ctx, "getline", from, first-1)
 		if err != nil {
 			return nil, err
 		}
-		lines = append(strs(v), lines...)
+		got := strs(v)
+		lines = append(got, lines...)
 		first = from
-		end := false
-		// Only the new lines are looked at: the others had neither.
-		for i := len(strs(v)) - 1; i >= 0; i-- {
-			l := lines[i]
-			if endFunction.MatchString(l) {
-				end = true
-				break
-			}
-			if startFunction.MatchString(l) {
+		for i := len(got) - 1; i >= 0 && start == 0; i-- {
+			switch l := lines[i]; {
+			case endFunction.MatchString(l):
+				depth++
+			case !startFunction.MatchString(l):
+			case depth > 0:
+				depth--
+			default:
 				start = first + i
-				break
 			}
-		}
-		if end {
-			break
 		}
 	}
 	vars := &variables{index: map[string]int{}}
@@ -56,22 +56,33 @@ func localVariables(ctx context.Context, h sdk.Host, lnum int) ([]cmp.Item, erro
 	}
 	at := func(n int) string { return lines[n-first] }
 	vars.analyze(at(start))
-	end := lnum - 1
-	for n := start + 1; n <= end; n++ {
+	for n := start + 1; n < lnum; n++ {
 		l := at(n)
-		if declaration.MatchString(l) {
+		if startFunction.MatchString(l) {
+			n = skipFunction(at, n, lnum)
+		} else if declaration.MatchString(l) {
 			vars.analyze(l)
-		} else if startFunction.MatchString(l) {
-			// Skip nested definitions conservatively.
-			for m := n; m <= end; m++ {
-				if endFunction.MatchString(at(m)) {
-					n = m
-					break
-				}
-			}
 		}
 	}
 	return vars.items, nil
+}
+
+// skipFunction returns the line that ends the function starting at line n,
+// with the functions inside it (before line limit).
+func skipFunction(at func(int) string, n, limit int) int {
+	depth := 0
+	for m := n + 1; m < limit; m++ {
+		switch l := at(m); {
+		case startFunction.MatchString(l):
+			depth++
+		case !endFunction.MatchString(l):
+		case depth > 0:
+			depth--
+		default:
+			return m
+		}
+	}
+	return limit
 }
 
 // variables are the items found, in order.

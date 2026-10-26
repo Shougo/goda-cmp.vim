@@ -4,6 +4,13 @@
 // (https://github.com/Shougo/ddc-source-vim). It has no Vim script: the
 // lines, the options and the help files it reads are asked for, and parsed
 // here.
+//
+// It differs from the original in three fixes: a line of only spaces goes on
+// from the line above (the original took "[\s\\]" for "s" or a backslash),
+// the local variables are found past the functions defined inside the
+// function (the original stopped at their end), and the special arguments
+// of the mapping commands (<buffer>, <silent>, ...) are offered (the original
+// read the table of contents of the help for them).
 package vim
 
 import (
@@ -116,9 +123,8 @@ func (source) Preview(ctx context.Context, h sdk.Host, a cmp.DoneArgs) (cmp.Prev
 var (
 	// A line that goes on from the line above.
 	continuedText = regexp.MustCompile(`^[ \t]*[\\(\[,|].*(?:<(?:let|const|for|var|final|` + optional("fu", "nction") + `|def)\b|=)`)
-	// Only backslashes and "s": as the original's "[\s\\]", which is not
-	// a space.
-	emptyText    = regexp.MustCompile(`^[s\\]*$`)
+	// Only spaces and backslashes.
+	emptyText    = regexp.MustCompile(`^[ \t\\]*$`)
 	nonBlank     = regexp.MustCompile(`[^ \t]`)
 	lineContinue = regexp.MustCompile(`^[ \t]*\\`)
 	bar          = regexp.MustCompile(`[ \t]+\|[ \t]+|<bar>`)
@@ -313,7 +319,7 @@ func (s source) maps(ctx context.Context, h sdk.Host) ([]cmp.Item, error) {
 	}
 	var words []string
 	if lines := strs(l[0]); len(lines) > 0 {
-		for _, line := range section(lines, `1\. Key mapping`, `2\. Abbreviations`) {
+		for _, line := range section(lines, `\*key-mapping\*`, `\*abbreviations\*`) {
 			if m := mapTag.FindStringSubmatch(line); m != nil {
 				words = append(words, m[1])
 			}

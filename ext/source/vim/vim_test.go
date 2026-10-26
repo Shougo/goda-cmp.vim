@@ -119,13 +119,17 @@ func TestGather(t *testing.T) {
 		lnum  int
 		input string
 		start int
-		want  []string // Word/Kind, sorted; nil: only check has
+		want  []string // Word/Kind (in any order); nil: only check has
 		has   []string
 	}{
 		{name: "locals", lnum: 4, input: "  let z = co", start: 10, want: locals},
-		// As the original, the search for the function stops at an
-		// "endfunction" above.
-		{name: "after nested", lnum: 11, input: "  call s:x(", start: 7},
+		// The function defined inside is skipped.
+		{name: "after nested", lnum: 11, input: "  call s:x(", start: 7,
+			want: append(slices.Clone(locals), `text/""`, "item/", "total/.")},
+		// In the function defined inside, only its own.
+		{name: "in nested", lnum: 7, input: "    echo x", start: 9, want: []string{"hidden/0"}},
+		// After a function: none.
+		{name: "after the function", lnum: 14, input: "echo x", start: 5},
 		{name: "def", lnum: 18, input: "echo x", start: 5,
 			want: []string{"area/", "height/", "width/"}},
 		{name: "has", lnum: 1, input: "if has('pa", start: 8,
@@ -137,7 +141,7 @@ func TestGather(t *testing.T) {
 		{name: "option local", lnum: 1, input: "echo &l:sw", start: 5,
 			has: []string{"&l:shiftwidth/o"}},
 		{name: "mapping", lnum: 1, input: "nnoremap <sil", start: 9,
-			has: []string{"<LeftMouse>/", "<Esc>/"}},
+			has: []string{"<LeftMouse>/", "<Esc>/", "<buffer>/", "<silent>/", "<expr>/"}},
 		{name: "environment", lnum: 1, input: "echo $HO", start: 5,
 			has: []string{"$HOME/e"}},
 		{name: "comment", lnum: 1, input: `" call s:x`, start: 10},
@@ -153,7 +157,7 @@ func TestGather(t *testing.T) {
 			}
 			got := words(g.Items)
 			if tc.has == nil {
-				if !slices.Equal(got, tc.want) {
+				if want := slices.Sorted(slices.Values(tc.want)); !slices.Equal(got, want) {
 					t.Errorf("got %q\nwant %q", got, tc.want)
 				}
 				return
@@ -179,6 +183,10 @@ func TestCurText(t *testing.T) {
 		{`\`, []string{"", "call f("}, "call f("},
 		{"", []string{"call f(", ""}, ""},
 		{"plain", []string{"let x = 1"}, "plain"},
+		// Only spaces: the line above goes on.
+		{"  ", []string{"call f("}, "call f(  "},
+		// (Not "s": the original took "[\s\\]" for "s" or a backslash.)
+		{"s", []string{"call f("}, "s"},
 	} {
 		if got := curText(tc.input, tc.prev); got != tc.want {
 			t.Errorf("curText(%q, %q) = %q, want %q", tc.input, tc.prev, got, tc.want)
