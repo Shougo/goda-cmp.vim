@@ -11,10 +11,6 @@ import (
 
 	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp.vim/cmp/cmptest"
-	"github.com/Shougo/goda-cmp.vim/ext/filter/convertertruncateabbr"
-	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
-	"github.com/Shougo/goda-cmp.vim/ext/filter/sorterlength"
-	"github.com/Shougo/goda-cmp.vim/ext/source/around"
 	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
 )
@@ -104,15 +100,15 @@ func shown(t *testing.T, h *cmptest.Host) (col int, words []string) {
 	return
 }
 
-func TestAroundPipeline(t *testing.T) {
+func TestPipeline(t *testing.T) {
 	b := newBuilder()
-	b.AddSource(around.New(around.Params{}))
-	b.AddFilter(matcherhead.New(matcherhead.Params{}))
-	b.AddFilter(sorterlength.New())
+	b.AddSource(cmptest.NewWords(cmptest.WordsParams{}))
+	b.AddFilter(cmptest.NewHead())
+	b.AddFilter(lengthSorter{})
 	b.PatchGlobal(cmp.Config{
-		Sources: []string{"around"},
+		Sources: []string{"words"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"_": {Matchers: []string{"matcherhead"}, Sorters: []string{"sorterlength"}},
+			"_": {Matchers: []string{"head"}, Sorters: []string{"length"}},
 		},
 	})
 	h := uiHost("func fooBarBaz() {", "\tfoo := fooBar + other", "\tfo")
@@ -120,13 +116,24 @@ func TestAroundPipeline(t *testing.T) {
 	c["lnum"] = int64(3)
 	complete(t, b, h, c)
 	col, words := shown(t, h)
-	// "fo" itself is not offered; shorter first; cursor-line neighbours first.
+	// "fo" itself is not offered; matched by its head; shorter first.
 	if want := []string{"foo", "fooBar", "fooBarBaz"}; !reflect.DeepEqual(words, want) {
 		t.Errorf("words = %q, want %q", words, want)
 	}
 	if col != 2 { // after the tab
 		t.Errorf("col = %d, want 2", col)
 	}
+}
+
+// lengthSorter is a sorter for tests: shorter words first.
+type lengthSorter struct{}
+
+func (lengthSorter) Name() string { return "length" }
+
+func (lengthSorter) Filter(_ context.Context, in cmp.FilterInput) ([]cmp.Item, error) {
+	out := slices.Clone(in.Items)
+	slices.SortStableFunc(out, func(a, b cmp.Item) int { return len(a.Word) - len(b.Word) })
+	return out, nil
 }
 
 func TestMinAutoCompleteLengthAndManual(t *testing.T) {
@@ -464,17 +471,17 @@ func TestDuplicateRegistration(t *testing.T) {
 func TestMergeSemantics(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(fakeSource{name: "a"})
-	b.AddFilter(matcherhead.New(matcherhead.Params{}))
-	b.AddFilter(sorterlength.New())
+	b.AddFilter(cmptest.NewHead())
+	b.AddFilter(lengthSorter{})
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"a"},
 		SourceOptions: map[string]cmp.SourceOption{
-			"a": {Mark: "A", Matchers: []string{"matcherhead"}, MaxItems: new(5)},
+			"a": {Mark: "A", Matchers: []string{"head"}, MaxItems: new(5)},
 		},
 	})
 	// A second patch keeps Mark and MaxItems, replaces Matchers, adds Sorters.
 	b.PatchGlobal(cmp.Config{SourceOptions: map[string]cmp.SourceOption{
-		"a": {Matchers: []string{}, Sorters: []string{"sorterlength"}},
+		"a": {Matchers: []string{}, Sorters: []string{"length"}},
 	}})
 	p, err := b.Plugin()
 	if err != nil {
@@ -500,40 +507,6 @@ func TestMergeSemantics(t *testing.T) {
 				t.Errorf("menu = %q, want the mark Z", items[0].Menu)
 			}
 		}
-	}
-}
-
-func TestMatcherHeadCase(t *testing.T) {
-	f := matcherhead.New(matcherhead.Params{})
-	items := []cmp.Item{{Word: "Foo"}, {Word: "foo"}, {Word: "bar"}}
-	run := func(f cmp.Filter, typed string) []string {
-		out, _ := f.Filter(context.Background(), cmp.FilterInput{Complete: typed, Items: items})
-		var w []string
-		for _, i := range out {
-			w = append(w, i.Word)
-		}
-		return w
-	}
-	if got := run(f, "fo"); !reflect.DeepEqual(got, []string{"Foo", "foo"}) {
-		t.Errorf("ignore case: %q", got)
-	}
-	if got := run(f, "Fo"); !reflect.DeepEqual(got, []string{"Foo"}) {
-		t.Errorf("smartcase: %q", got)
-	}
-	if got := run(matcherhead.New(matcherhead.Params{CaseSensitive: true}), "fo"); !reflect.DeepEqual(got, []string{"foo"}) {
-		t.Errorf("case sensitive: %q", got)
-	}
-}
-
-func TestTruncateAbbr(t *testing.T) {
-	f := convertertruncateabbr.New(convertertruncateabbr.Params{MaxWidth: 5})
-	in := []cmp.Item{{Word: "日本語日本語日本語"}, {Word: "ab"}}
-	out, _ := f.Filter(context.Background(), cmp.FilterInput{Items: in})
-	if out[0].Abbr != "日本語日…" || out[1].Abbr != "" {
-		t.Errorf("abbrs = %q, %q", out[0].Abbr, out[1].Abbr)
-	}
-	if in[0].Abbr != "" {
-		t.Error("the input slice was modified")
 	}
 }
 

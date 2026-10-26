@@ -11,7 +11,6 @@ import (
 
 	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp.vim/cmp/cmptest"
-	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
@@ -51,14 +50,14 @@ func words(ws ...string) []cmp.Item {
 	return out
 }
 
-// plugin builds the plugin with matcherhead and the given configuration.
+// plugin builds the plugin with the head matcher and the given configuration.
 func plugin(t *testing.T, cfg cmp.Config, srcs ...cmp.Source) sdk.Plugin {
 	t.Helper()
 	b := newBuilder()
 	for _, s := range srcs {
 		b.AddSource(s)
 	}
-	b.AddFilter(matcherhead.New(matcherhead.Params{}))
+	b.AddFilter(cmptest.NewHead())
 	b.PatchGlobal(cfg)
 	p, err := b.Plugin()
 	if err != nil {
@@ -78,7 +77,7 @@ func call(t *testing.T, p sdk.Plugin, h sdk.Host, c map[string]any) {
 // gathered again when the word starts elsewhere, when the source is volatile
 // or incomplete, and for a manual completion.
 func TestCache(t *testing.T) {
-	head := map[string]cmp.SourceOption{"_": {Matchers: []string{"matcherhead"}}}
+	head := map[string]cmp.SourceOption{"_": {Matchers: []string{"head"}}}
 	src := &countingSource{name: "s", items: words("alpha", "alps", "beta")}
 	p := plugin(t, cmp.Config{Sources: []string{"s"}, SourceOptions: head}, src)
 	h := uiHost()
@@ -140,7 +139,7 @@ func TestCache(t *testing.T) {
 
 // update_items replaces what a source gathered and shows the list again.
 func TestUpdateItems(t *testing.T) {
-	head := map[string]cmp.SourceOption{"_": {Matchers: []string{"matcherhead"}}}
+	head := map[string]cmp.SourceOption{"_": {Matchers: []string{"head"}}}
 	src := &countingSource{name: "s", items: words("alpha")}
 	p := plugin(t, cmp.Config{Sources: []string{"s"}, SourceOptions: head}, src)
 	h := uiHost()
@@ -206,9 +205,9 @@ func TestMatcherKeyAndIgnoreCase(t *testing.T) {
 	}}
 	b := newBuilder()
 	b.AddSource(src)
-	b.AddFilter(matcherhead.New(matcherhead.Params{}))
+	b.AddFilter(cmptest.NewHead())
 	b.PatchGlobal(cmp.Config{Sources: []string{"s"}, SourceOptions: map[string]cmp.SourceOption{
-		"s": {Matchers: []string{"matcherhead"}, MatcherKey: "abbr", IgnoreCase: new(true), MinAutoCompleteLength: new(0)},
+		"s": {Matchers: []string{"head"}, MatcherKey: "abbr", IgnoreCase: new(true), MinAutoCompleteLength: new(0)},
 	}})
 	h := uiHost()
 	complete(t, b, h, ctxMap(1, "A", ""))
@@ -317,7 +316,7 @@ func TestDynamicFiltersAndConfig(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"alpha", "beta"}})
 	b.AddSource(fakeSource{name: "b", items: []string{"bravo"}})
-	b.AddFilter(matcherhead.New(matcherhead.Params{}))
+	b.AddFilter(cmptest.NewHead())
 	var seen []string
 	b.PatchGlobal(cmp.Config{
 		Sources: []string{"a"},
@@ -325,7 +324,7 @@ func TestDynamicFiltersAndConfig(t *testing.T) {
 			MinAutoCompleteLength: new(0),
 			DynamicFilters: func(_ context.Context, _ sdk.Host, a cmp.DynamicFiltersArgs) (cmp.Filters, error) {
 				seen = append(seen, a.Source+":"+a.Complete)
-				return cmp.Filters{Matchers: []string{"matcherhead"}}, nil
+				return cmp.Filters{Matchers: []string{"head"}}, nil
 			},
 		}},
 		// In a comment, the other source.

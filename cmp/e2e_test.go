@@ -304,7 +304,7 @@ func TestRealFunctions(t *testing.T) {
 		if err := os.WriteFile(file, []byte(text), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		// 1. On the empty line 2, "alp": around and around2 (which takes
+		// 1. On the empty line 2, "alp": words and words2 (which takes
 		//    words of 9 characters or more, and keeps duplicates).
 		// 2. Ctrl-X 2: the common prefix, "alpha".
 		// 3. Ctrl-X 1: the first item.

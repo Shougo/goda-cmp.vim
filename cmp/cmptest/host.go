@@ -65,11 +65,17 @@ func (h *Host) Calls() []Call {
 }
 
 // Lines makes a Host whose getbufline returns the given lines, honouring the
-// first/last arguments like Vim does.
+// first/last arguments like Vim does (last may be "$").
 func Lines(lines ...string) *Host {
 	return &Host{Funcs: map[string]func(...any) (any, error){
 		"getbufline": func(a ...any) (any, error) {
-			first, last := toInt(a[1]), toInt(a[2])
+			first, last := toInt(a[1]), toInt(a[1])
+			if len(a) > 2 {
+				last = len(lines)
+				if a[2] != "$" {
+					last = toInt(a[2])
+				}
+			}
 			if first < 1 {
 				first = 1
 			}
