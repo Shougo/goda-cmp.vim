@@ -238,7 +238,7 @@ func TestDup(t *testing.T) {
 			var got []string
 			var dups []int
 			for _, c := range h.Calls() {
-				if c.Fn == "goda_cmp#ui#native#show" {
+				if c.Fn == "goda_cmp_testui#insert#show" {
 					got, dups = nil, nil
 					for _, it := range c.Args[0].(map[string]any)["items"].([]cmp.Item) {
 						got = append(got, it.Word)
@@ -283,11 +283,11 @@ func TestHideTimeout(t *testing.T) {
 	complete(t, b, h, ctxMap(1, "x", ""))
 	var fns []string
 	for _, c := range h.Calls() {
-		if strings.HasPrefix(c.Fn, "goda_cmp#ui#native#") {
+		if strings.HasPrefix(c.Fn, "goda_cmp_testui#insert#") {
 			fns = append(fns, c.Fn)
 		}
 	}
-	if !reflect.DeepEqual(fns, []string{"goda_cmp#ui#native#hide", "goda_cmp#ui#native#show"}) {
+	if !reflect.DeepEqual(fns, []string{"goda_cmp_testui#insert#hide", "goda_cmp_testui#insert#show"}) {
 		t.Errorf("ui calls = %v", fns)
 	}
 	if _, w := shown(t, h); !reflect.DeepEqual(w, []string{"fastword"}) {
@@ -498,7 +498,7 @@ func TestManualContinues(t *testing.T) {
 	c["event"] = "TextChangedI"
 	call(t, p, h, c)
 	for _, cl := range h.Calls()[n:] {
-		if cl.Fn == "goda_cmp#ui#native#show" {
+		if cl.Fn == "goda_cmp_testui#insert#show" {
 			t.Errorf("shown after hide: %v", cl.Args)
 		}
 	}
@@ -531,8 +531,8 @@ func TestAutoCompleteEventsAndPreviewOption(t *testing.T) {
 	if err != nil || !reflect.DeepEqual(got, map[string]any{"kind": "empty"}) {
 		t.Errorf("preview with preview off = %v, %v", got, err)
 	}
-	// visible: the native UI asks pumvisible().
-	h.Funcs["pumvisible"] = func(...any) (any, error) { return int64(1), nil }
+	// visible: the UI is asked.
+	h.Funcs["goda_cmp_testui#insert#visible"] = func(...any) (any, error) { return int64(1), nil }
 	v, err := p.Handlers()["visible"](context.Background(), h, nil)
 	if err != nil || v != true {
 		t.Errorf("visible = %v, %v", v, err)

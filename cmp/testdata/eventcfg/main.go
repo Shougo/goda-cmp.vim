@@ -5,11 +5,11 @@ package main
 import (
 	"context"
 	"fmt"
-	"github.com/Shougo/goda-cmp.vim/ext/ui/native"
 	"os"
 	"path/filepath"
 
 	"github.com/Shougo/goda-cmp.vim/cmp"
+	"github.com/Shougo/goda-cmp.vim/cmp/cmptest"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
@@ -34,8 +34,8 @@ func (recorder) OnEvent(_ context.Context, _ sdk.Host, ev cmp.Event) error {
 
 func main() {
 	b := cmp.New()
-	b.AddUI(native.New())
+	b.AddUI(cmptest.NewUI("test", "i", "c", "t"))
 	b.AddSource(recorder{})
-	b.PatchGlobal(cmp.Config{UI: "native", Sources: []string{"recorder"}})
+	b.PatchGlobal(cmp.Config{UI: "test", Sources: []string{"recorder"}})
 	b.Main()
 }

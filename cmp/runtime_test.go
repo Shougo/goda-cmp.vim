@@ -85,7 +85,7 @@ func TestRuntimePatchMapsMerge(t *testing.T) {
 	}))
 	var items []cmp.Item
 	for _, c := range h.Calls() {
-		if c.Fn == "goda_cmp#ui#native#show" {
+		if c.Fn == "goda_cmp_testui#insert#show" {
 			items = c.Args[0].(map[string]any)["items"].([]cmp.Item)
 		}
 	}
@@ -117,7 +117,7 @@ func TestRuntimePatchErrors(t *testing.T) {
 func TestValidateHandler(t *testing.T) {
 	p, _ := twoSources().Plugin()
 	validate := p.Handlers()["validate"]
-	if _, err := validate(context.Background(), nil, []any{map[string]any{"sources": []any{"a", "b"}, "ui": "pum"}}); err != nil {
+	if _, err := validate(context.Background(), nil, []any{map[string]any{"sources": []any{"a", "b"}, "ui": "every"}}); err != nil {
 		t.Errorf("valid config: %v", err)
 	}
 	for name, cfg := range map[string]map[string]any{
@@ -137,13 +137,13 @@ func TestValidateHandler(t *testing.T) {
 func TestOptionsHandlerSeesPatches(t *testing.T) {
 	p, _ := twoSources().Plugin()
 	got, err := p.Handlers()["options"](context.Background(), nil, []any{"go", map[string]any{
-		"buffer": map[string]any{"ui": "pum", "autoComplete": false, "autoCompleteDelay": 50},
+		"buffer": map[string]any{"ui": "every", "autoComplete": false, "autoCompleteDelay": 50},
 	}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	m := got.(map[string]any)
-	if m["ui"] != "pum" || m["autoComplete"] != false || m["delay"] != 50 {
+	if m["ui"] != "every" || m["autoComplete"] != false || m["delay"] != 50 {
 		t.Errorf("options = %v", m)
 	}
 }

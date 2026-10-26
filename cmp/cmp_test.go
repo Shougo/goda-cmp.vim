@@ -15,8 +15,6 @@ import (
 	"github.com/Shougo/goda-cmp.vim/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp.vim/ext/filter/sorterlength"
 	"github.com/Shougo/goda-cmp.vim/ext/source/around"
-	"github.com/Shougo/goda-cmp.vim/ext/ui/native"
-	"github.com/Shougo/goda-cmp.vim/ext/ui/pum"
 	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
 )
@@ -53,17 +51,18 @@ func (s fakeSource) Gather(ctx context.Context, _ sdk.Host, c *cmp.Context) (cmp
 	return cmp.Gathered{Start: start, Items: items}, nil
 }
 
-// newBuilder is cmp.New with the UIs a configuration adds, "native" chosen.
+// newBuilder is cmp.New with two test UIs, "insert" (insert mode only)
+// and "every" (every mode, a cmp.Skipper), "insert" chosen.
 func newBuilder() *cmp.Builder {
-	return cmp.New().AddUI(native.New()).AddUI(pum.New()).PatchGlobal(cmp.Config{UI: "native"})
+	return cmp.New().AddUI(cmptest.NewUI("insert")).AddUI(cmptest.NewUI("every", "i", "c", "t").WithSkip()).PatchGlobal(cmp.Config{UI: "insert"})
 }
 
-// uiHost fakes the Vim side of the native UI and remembers what was shown.
+// uiHost fakes the Vim side of the test UIs and remembers what was shown.
 func uiHost(lines ...string) *cmptest.Host {
 	h := cmptest.Lines(lines...)
-	h.Funcs["goda_cmp#ui#native#show"] = func(...any) (any, error) { return nil, nil }
-	h.Funcs["goda_cmp#ui#native#hide"] = func(...any) (any, error) { return nil, nil }
-	h.Funcs["goda_cmp#ui#pum#skip"] = func(...any) (any, error) { return false, nil }
+	h.Funcs["goda_cmp_testui#insert#show"] = func(...any) (any, error) { return nil, nil }
+	h.Funcs["goda_cmp_testui#insert#hide"] = func(...any) (any, error) { return nil, nil }
+	h.Funcs["goda_cmp_testui#every#skip"] = func(...any) (any, error) { return false, nil }
 	return h
 }
 
@@ -90,10 +89,10 @@ func shown(t *testing.T, h *cmptest.Host) (col int, words []string) {
 	t.Helper()
 	calls := h.Calls()
 	for i := len(calls) - 1; i >= 0; i-- {
-		if calls[i].Fn == "goda_cmp#ui#native#hide" {
+		if calls[i].Fn == "goda_cmp_testui#insert#hide" {
 			return 0, nil
 		}
-		if calls[i].Fn == "goda_cmp#ui#native#show" {
+		if calls[i].Fn == "goda_cmp_testui#insert#show" {
 			m := calls[i].Args[0].(map[string]any)
 			for _, it := range m["items"].([]cmp.Item) {
 				words = append(words, it.Word)
@@ -303,9 +302,9 @@ func TestSupersededRequestIsDropped(t *testing.T) {
 func TestUIChoice(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"x"}})
-	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "pum"})
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "every"})
 	h := uiHost()
-	h.Funcs["goda_cmp#ui#pum#show"] = func(...any) (any, error) { return nil, nil }
+	h.Funcs["goda_cmp_testui#every#show"] = func(...any) (any, error) { return nil, nil }
 	complete(t, b, h, ctxMap(1, "x", ""))
 	var got []string
 	for _, c := range h.Calls() {
@@ -314,7 +313,7 @@ func TestUIChoice(t *testing.T) {
 		}
 	}
 	// The UI is asked first whether the change was its own.
-	if !reflect.DeepEqual(got, []string{"goda_cmp#ui#pum#skip", "goda_cmp#ui#pum#show"}) {
+	if !reflect.DeepEqual(got, []string{"goda_cmp_testui#every#skip", "goda_cmp_testui#every#show"}) {
 		t.Errorf("calls = %v", got)
 	}
 }
@@ -324,15 +323,17 @@ func TestUIChoice(t *testing.T) {
 func TestSkipCompletion(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"xyz"}})
-	b.PatchGlobal(cmp.Config{Sources: []string{"a"}})
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "every"})
 	h := uiHost()
-	selected := int64(0) // an item is selected in the native popup
-	h.Funcs["complete_info"] = func(...any) (any, error) { return map[string]any{"selected": selected}, nil }
-	h.Funcs["get"] = func(a ...any) (any, error) { return a[0].(map[string]any)["selected"], nil }
+	h.Funcs["goda_cmp_testui#every#show"] = func(...any) (any, error) { return nil, nil }
+	// The UI says the change was its own (an item it inserted) while
+	// own is set.
+	own := true
+	h.Funcs["goda_cmp_testui#every#skip"] = func(...any) (any, error) { return own, nil }
 	shows := func() int {
 		n := 0
 		for _, c := range h.Calls() {
-			if c.Fn == "goda_cmp#ui#native#show" {
+			if c.Fn == "goda_cmp_testui#every#show" {
 				n++
 			}
 		}
@@ -346,18 +347,25 @@ func TestSkipCompletion(t *testing.T) {
 		t.Fatalf("shown %d times while the user moves through the popup", n)
 	}
 	c = ctxMap(2, "x", "")
-	c["event"] = "TextChangedI" // typing: not asked
-	complete(t, b, h, c)
-	c = ctxMap(3, "x", "")
 	c["event"] = "TextChangedP"
 	c["manual"] = true // asked for: never skipped
 	complete(t, b, h, c)
-	selected = -1
-	c = ctxMap(4, "x", "")
-	c["event"] = "TextChangedP" // popup open, nothing selected
+	own = false
+	c = ctxMap(3, "x", "")
+	c["event"] = "TextChangedI" // typing
 	complete(t, b, h, c)
-	if n := shows(); n != 3 {
-		t.Errorf("shown %d times, want 3", n)
+	if n := shows(); n != 2 {
+		t.Errorf("shown %d times, want 2", n)
+	}
+	// The UI is not asked about the manual request.
+	n := 0
+	for _, cl := range h.Calls() {
+		if cl.Fn == "goda_cmp_testui#every#skip" {
+			n++
+		}
+	}
+	if n != 2 {
+		t.Errorf("skip asked %d times, want 2", n)
 	}
 }
 
@@ -373,7 +381,7 @@ func TestUpdateInfo(t *testing.T) {
 	}
 	h := uiHost()
 	var got map[string]any
-	h.Funcs["goda_cmp#ui#native#update_info"] = func(a ...any) (any, error) {
+	h.Funcs["goda_cmp_testui#insert#update_info"] = func(a ...any) (any, error) {
 		got = a[0].(map[string]any)
 		return nil, nil
 	}
@@ -477,7 +485,7 @@ func TestMergeSemantics(t *testing.T) {
 		t.Fatal(err)
 	}
 	m := got.(map[string]any)
-	if m["ui"] != "native" || m["delay"] != 0 || m["autoComplete"] != true {
+	if m["ui"] != "insert" || m["delay"] != 0 || m["autoComplete"] != true {
 		t.Errorf("options = %v", m)
 	}
 	// The effective source option is visible through behaviour: Mark is used.
@@ -486,7 +494,7 @@ func TestMergeSemantics(t *testing.T) {
 	b.PatchGlobal(cmp.Config{Sources: []string{"z"}, SourceOptions: map[string]cmp.SourceOption{"z": {Mark: "Z"}}})
 	complete(t, b, h, ctxMap(1, "z", ""))
 	for _, c := range h.Calls() {
-		if c.Fn == "goda_cmp#ui#native#show" {
+		if c.Fn == "goda_cmp_testui#insert#show" {
 			items := c.Args[0].(map[string]any)["items"].([]cmp.Item)
 			if items[0].Menu != "Z" {
 				t.Errorf("menu = %q, want the mark Z", items[0].Menu)
@@ -561,16 +569,16 @@ func TestCmdlineSources(t *testing.T) {
 	b.AddSource(fakeSource{name: "buf", items: []string{"buffer_word"}})
 	b.AddSource(fakeSource{name: "cmd", items: []string{"command"}})
 	b.PatchGlobal(cmp.Config{
-		UI:             "pum",
+		UI:             "every",
 		Sources:        []string{"buf"},
 		CmdlineSources: map[string][]string{":": {"cmd"}},
 	})
 	h := uiHost()
-	h.Funcs["goda_cmp#ui#pum#show"] = func(...any) (any, error) { return nil, nil }
+	h.Funcs["goda_cmp_testui#every#show"] = func(...any) (any, error) { return nil, nil }
 	shown := func() []string {
 		var words []string
 		for _, c := range h.Calls() {
-			if c.Fn == "goda_cmp#ui#pum#show" {
+			if c.Fn == "goda_cmp_testui#every#show" {
 				words = nil
 				for _, it := range c.Args[0].(map[string]any)["items"].([]cmp.Item) {
 					words = append(words, it.Word)
@@ -596,22 +604,22 @@ func TestCmdlineSources(t *testing.T) {
 	c["mode"], c["cmdtype"] = "c", "/"
 	complete(t, b, h, c)
 	for _, call := range h.Calls()[n:] {
-		if call.Fn == "goda_cmp#ui#pum#show" {
+		if call.Fn == "goda_cmp_testui#every#show" {
 			t.Errorf("/ showed something")
 		}
 	}
 }
 
 func TestCmdlineNeedsModesUI(t *testing.T) {
-	b := newBuilder() // UI "native", which cannot show on the command line
+	b := newBuilder() // UI "insert", which cannot show on the command line
 	b.AddSource(fakeSource{name: "cmd"})
 	b.PatchGlobal(cmp.Config{CmdlineSources: map[string][]string{":": {"cmd"}}})
-	if err := b.Validate(); err == nil || !strings.Contains(err.Error(), `ui "native" cannot show candidates on the command line`) {
-		t.Errorf("native: err = %v", err)
+	if err := b.Validate(); err == nil || !strings.Contains(err.Error(), `ui "insert" cannot show candidates on the command line`) {
+		t.Errorf("insert: err = %v", err)
 	}
-	b.PatchGlobal(cmp.Config{UI: "pum"})
+	b.PatchGlobal(cmp.Config{UI: "every"})
 	if err := b.Validate(); err != nil {
-		t.Errorf("pum: %v", err)
+		t.Errorf("every: %v", err)
 	}
 	b.PatchGlobal(cmp.Config{CmdlineSources: map[string][]string{"/": {"nope"}}})
 	if err := b.Validate(); err == nil || !strings.Contains(err.Error(), `unknown source "nope" in cmdlineSources["/"]`) {
@@ -626,16 +634,16 @@ func TestModesUI(t *testing.T) {
 		ui, mode string
 		ok       bool
 	}{
-		{"native", "i", true},
-		{"native", "t", false},
-		{"pum", "c", true},
-		{"pum", "t", true},
+		{"insert", "i", true},
+		{"insert", "t", false},
+		{"every", "c", true},
+		{"every", "t", true},
 	} {
 		b := newBuilder()
 		b.AddSource(fakeSource{name: "a", items: []string{"x"}})
 		b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: tc.ui})
 		h := uiHost()
-		h.Funcs["goda_cmp#ui#pum#show"] = func(...any) (any, error) { return nil, nil }
+		h.Funcs["goda_cmp_testui#every#show"] = func(...any) (any, error) { return nil, nil }
 		c := ctxMap(1, "x", "")
 		c["mode"] = tc.mode
 		err := completeErr(t, b, h, c)
@@ -650,7 +658,7 @@ func TestModesUI(t *testing.T) {
 func TestCmdlineTypeWithoutSources(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"x"}})
-	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "native"})
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "insert"})
 	h := uiHost()
 	c := ctxMap(1, "x", "")
 	c["mode"], c["cmdtype"] = "c", "@"

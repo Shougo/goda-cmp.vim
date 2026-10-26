@@ -72,15 +72,17 @@ editor type-checks and completes the configuration.
 
 ```sh
 go test ./...                      # unit tests; also real Vim and Neovim if present
-GODA_CMP_PUM=/path/to/pum.vim go test ./cmp   # also run the pum scenario
+GODA_CMP_PUM=/path/to/pum.vim go test ./ext/e2e   # also the pum.vim scenarios
 ```
 
 The end-to-end tests type into a real Vim and a real Neovim, whichever are
-installed, in a pseudo terminal (Python 3 needed), using a binary built from
-`examples/config`; ext/source/lsp does the same with gopls if it is
-installed. CI (`.github/workflows/ci.yml`) installs all of them. They build
-against goda.vim as a sibling directory (`../goda.vim`), and are skipped
-without it.
+installed, in a pseudo terminal (Python 3 needed), with a binary built from a
+configuration. Those of the core (`cmp`) use a test UI (`cmptest.NewUI`) and
+no extension's UI; those of the UIs, the extensions and the examples are in
+`ext/e2e` (and `ext/source/lsp`, with gopls if it is installed). The harness
+is the package `cmp/cmptest/e2e`, which extensions in other modules can use
+too. CI (`.github/workflows/ci.yml`) installs all of them. They build against
+goda.vim as a sibling directory (`../goda.vim`), and are skipped without it.
 
 ## License
 

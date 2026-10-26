@@ -1,73 +1,28 @@
 package lsp
 
 import (
-	"encoding/json"
-	"github.com/Shougo/goda-cmp.vim/internal/e2e"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
 	"testing"
 	"time"
-)
 
-type dump struct {
-	Visible bool     `json:"visible"`
-	Words   []string `json:"words"`
-	Line    string   `json:"line"`
-}
+	"github.com/Shougo/goda-cmp.vim/cmp/cmptest/e2e"
+)
 
 // TestRealGopls types Go code into a real Vim with gopls behind the
 // source: member completion after ".", accepting an item, and accepting an
 // item of a package that is not imported yet, which must add the import.
-// It uses the driver and vimrc of the cmp package's end-to-end tests.
 func TestRealGopls(t *testing.T) {
 	p := goplsParams(t)
-	if _, err := exec.LookPath("python3"); err != nil {
-		t.Skip("python3 is needed to drive the pty")
-	}
-	repo, _ := filepath.Abs("../../..")
-	godaRoot, _ := filepath.Abs("../../../../goda.vim")
-	if _, err := os.Stat(godaRoot); err != nil {
-		t.Skip("goda.vim is not next to goda-cmp.vim")
-	}
-	testdata := filepath.Join(repo, "cmp", "testdata")
-
-	dir := t.TempDir()
-	cfgDir := filepath.Join(dir, "config")
-	if err := os.Mkdir(cfgDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	b, err := os.ReadFile("testdata/config/main.go")
-	if err != nil {
-		t.Fatal(err)
-	}
-	gomod := "module goda-cmp-config\n\ngo 1.26\n\n" +
-		"require github.com/Shougo/goda-cmp.vim v0.0.0\n\n" +
-		"replace github.com/Shougo/goda-cmp.vim => " + repo + "\n" +
-		"replace github.com/Shougo/goda.vim => " + godaRoot + "\n"
-	for name, data := range map[string][]byte{"main.go": b, "go.mod": []byte(gomod)} {
-		if err := os.WriteFile(filepath.Join(cfgDir, name), data, 0o644); err != nil {
-			t.Fatal(err)
-		}
-	}
-	bin := filepath.Join(dir, "goda-cmp")
-	for _, args := range [][]string{{"mod", "tidy"}, {"build", "-o", bin, "."}} {
-		cmd := exec.Command("go", args...)
-		cmd.Dir = cfgDir
-		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-		if out, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("go %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
-	}
+	bin := e2e.BuildConfig(t, "testdata/config")
 
 	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
 		// No indentation: the driver reads the popup from the screen, and a tab
 		// would shift it.
 		path := writeModule(t, "package main\n\nimport \"fmt\"\n\nfunc main() {\n}\n")
-		out := filepath.Join(t.TempDir(), "out.jsonl")
 		// 1. "fmt." then "Pri": members of fmt, from the trigger character on.
 		//    (The first request also starts gopls, hence the longer wait.)
 		// 2. Ctrl-N selects the first item, Ctrl-Y accepts it.
@@ -83,26 +38,8 @@ func TestRealGopls(t *testing.T) {
 	  ["(\"\")\u001b", 0.3],
 	  [":w\r", 0.5]
 	]`
-		cmd := exec.Command("python3", "-I", filepath.Join(testdata, "drive.py"), ed.Bin, filepath.Join(testdata, "vimrc.vim"), path, steps)
-		cmd.Env = append(os.Environ(),
-			"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
-			"GODA_NO_PATCH_MAPS=1", "PUM_RTP=", "GODA_GOPLS="+p.Command[0])
-		if b, err := cmd.CombinedOutput(); err != nil {
-			t.Fatalf("driver: %v\n%s", err, b)
-		}
-		raw, err := os.ReadFile(out)
-		if err != nil {
-			t.Fatalf("Vim recorded nothing: %v", err)
-		}
-		var ds []dump
-		for l := range strings.SplitSeq(strings.TrimSpace(string(raw)), "\n") {
-			var d dump
-			if err := json.Unmarshal([]byte(l), &d); err != nil {
-				t.Fatalf("bad record %q: %v", l, err)
-			}
-			ds = append(ds, d)
-		}
-		t.Logf("records: %+v", ds)
+		ds := e2e.Drive(t, ed, e2e.Options{Bin: bin, File: path, Steps: steps,
+			Env: []string{"GODA_GOPLS=" + p.Command[0]}})
 		// The popup shows the label and, from newer gopls, its
 		// labelDetails ("Println(a ...any)"): compare the names only.
 		for i := range ds {

@@ -4,14 +4,14 @@ package main
 
 import (
 	"github.com/Shougo/goda-cmp.vim/cmp"
-	"github.com/Shougo/goda-cmp.vim/ext/ui/native"
+	"github.com/Shougo/goda-cmp.vim/cmp/cmptest"
 )
 
 func main() {
 	b := cmp.New()
-	b.AddUI(native.New())
+	b.AddUI(cmptest.NewUI("test", "i", "c", "t"))
 	b.PatchGlobal(cmp.Config{
-		UI:            "native",
+		UI:            "test",
 		SourceOptions: map[string]cmp.SourceOption{"_": {Matchers: []string{"matcher_head"}}},
 	})
 	b.Main()

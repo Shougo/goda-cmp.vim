@@ -569,6 +569,12 @@ expressions made of those calls, lists, strings and numbers.
 `cmptest.NewEditor()` adds buffers, a cursor and the buffer functions
 (getbufline(), setbufline(), appendbufline(), deletebufline(), ...), which
 behave like Vim's, for sources that read or change buffers.
+`cmptest.NewUI()` is a UI that calls Vim functions named after it
+("goda_cmp_testui#{name}#show", ...), for tests that need a UI but not a
+particular one.  Package `cmp/cmptest/e2e` runs end-to-end tests in a real
+Vim or Neovim: it builds a configuration (`BuildConfig`), types keys into the
+editor in a pseudo terminal (`Drive`, Python 3 needed) and returns what the
+editor recorded.
 
 Extensions of this project are named `goda-cmp-source-{name}` and
 `goda-cmp-filter-{name}`, with the package `{name}`, registered under the

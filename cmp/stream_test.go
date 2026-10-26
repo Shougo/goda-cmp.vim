@@ -57,7 +57,7 @@ func shows(h *cmptest.Host) []show {
 	var out []show
 	for _, c := range h.Calls() {
 		switch c.Fn {
-		case "goda_cmp#ui#native#show":
+		case "goda_cmp_testui#insert#show":
 			m := c.Args[0].(map[string]any)
 			var s show
 			for _, it := range m["items"].([]cmp.Item) {
@@ -65,7 +65,7 @@ func shows(h *cmptest.Host) []show {
 			}
 			s.final = m["final"].(bool)
 			out = append(out, s)
-		case "goda_cmp#ui#native#hide":
+		case "goda_cmp_testui#insert#hide":
 			out = append(out, show{final: true})
 		}
 	}
@@ -215,7 +215,7 @@ func (s *lspSource) Resolve(_ context.Context, _ sdk.Host, a cmp.DoneArgs) (cmp.
 func refsOf(h *cmptest.Host) map[string]string {
 	refs := map[string]string{}
 	for _, c := range h.Calls() {
-		if c.Fn == "goda_cmp#ui#native#show" {
+		if c.Fn == "goda_cmp_testui#insert#show" {
 			for _, it := range c.Args[0].(map[string]any)["items"].([]cmp.Item) {
 				refs[it.Word] = it.Ref
 			}

@@ -1,5 +1,8 @@
-// Package e2e finds the editors the end-to-end tests run in: Vim (with
-// +job, +channel and +timers) and Neovim, whichever are installed.
+// Package e2e runs end-to-end tests in real editors: Vim (with +job,
+// +channel and +timers) and Neovim, whichever are installed. It builds a
+// configuration into a binary (BuildConfig), types keys into the editor in a
+// pseudo terminal (Drive) and returns what the editor recorded. Extensions
+// in other modules can use it for their own tests.
 package e2e
 
 import (
