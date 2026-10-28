@@ -64,3 +64,24 @@ jobs:
       - run: go test -race ./...
         env:
           GODA_CMP_PUM: ${{ github.workspace }}/pum.vim
+
+  # Windows and macOS: vet and the tests that need no editor, shell or
+  # language server (-short; those run on Linux above).
+  other:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest]
+    steps:
+      # Keep the line endings of the repository (the embedded Vim and shell
+      # scripts, and gofmt on Linux).
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: stable
+      - run: go version
+      - run: go vet ./...
+      - run: go test -short ./...

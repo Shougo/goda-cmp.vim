@@ -36,6 +36,9 @@ func TestUnsupportedShell(t *testing.T) {
 
 // With zsh installed: a real completion of a command name.
 func TestZsh(t *testing.T) {
+	if testing.Short() {
+		t.Skip("starts zsh")
+	}
 	if _, err := exec.LookPath("zsh"); err != nil {
 		t.Skip("zsh is not installed")
 	}
@@ -64,6 +67,9 @@ func TestZsh(t *testing.T) {
 
 // A request that gives up does not get its answer read by the next one.
 func TestStaleAnswer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("starts zsh")
+	}
 	if _, err := exec.LookPath("zsh"); err != nil {
 		t.Skip("zsh is not installed")
 	}

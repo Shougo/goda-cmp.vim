@@ -95,6 +95,9 @@ enddef
 `
 
 func TestGather(t *testing.T) {
+	if testing.Short() {
+		t.Skip("starts Vim")
+	}
 	if _, err := exec.LookPath("vim"); err != nil {
 		t.Skip("no vim")
 	}
