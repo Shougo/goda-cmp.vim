@@ -285,7 +285,7 @@ func (b *Builder) Validate() error {
 }
 
 // Plugin validates the configuration and returns the plugin to hand to
-// host.Main (or to combine with other plugins).
+// host.Main. Main(others...) is the simpler way to serve other plugins too.
 func (b *Builder) Plugin() (sdk.Plugin, error) {
 	if err := b.Validate(); err != nil {
 		return nil, err
@@ -294,13 +294,20 @@ func (b *Builder) Plugin() (sdk.Plugin, error) {
 }
 
 // Main runs the plugin as the whole program: the last line of a config.go
-// main function.
+// main function. The binary also serves the other plugins given (an input
+// method whose completion sources are in this configuration, say).
 //
 // A configuration error does not end the program: it still starts, so that
 // goda_cmp#enable() can show the error in the editor (cmp.status), and every
-// other request fails with it. It is also written to the plugin log.
-func (b *Builder) Main() {
-	host.Main(b.mainPlugin())
+// other request fails with it; the other plugins work as usual. It is also
+// written to the plugin log.
+func (b *Builder) Main(others ...sdk.Plugin) {
+	host.Main(b.mainPlugins(others)...)
+}
+
+// mainPlugins are the plugins Main serves: this one first.
+func (b *Builder) mainPlugins(others []sdk.Plugin) []sdk.Plugin {
+	return append([]sdk.Plugin{b.mainPlugin()}, others...)
 }
 
 // mainPlugin is the plugin Main serves: the engine, or with a configuration

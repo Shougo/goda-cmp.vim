@@ -70,9 +70,8 @@ The binary has to be built again after you edit `main.go` or `config.go`, or
 update goda.vim, goda-cmp.vim or an extension: >
 
 	go get -u github.com/Shougo/goda-cmp.vim github.com/Shougo/goda.vim
-	go mod tidy
 <
-and |goda_cmp#build()|.  To build whenever you save the configuration: >vim
+and |goda_cmp#build()| (which runs `go mod tidy` first).  To build whenever you save the configuration: >vim
 
 	autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#build()
 <
@@ -81,9 +80,11 @@ FUNCTIONS                                                 *goda-cmp-functions*
 
                                                             *goda_cmp#build()*
 goda_cmp#build()
-		Run `go build` in |g:goda_cmp#config_dir|.  When completion is
-		running it is stopped first and started again with the new
-		binary.  When the build fails the error is thrown and the
+		Run `go mod tidy` and `go build` in |g:goda_cmp#config_dir|.
+		When completion is running it is stopped first and started
+		again with the new binary.  When the build fails the error is
+		thrown (with that of `go mod tidy`, when it failed too: it
+		needs the network for modules not in the cache yet) and the
 		previous binary keeps running.
 
                                                            *goda_cmp#enable()*
@@ -293,6 +294,10 @@ The configuration is Go code; see `examples/config`.  Its shape mirrors
 	b.PatchFiletype("markdown", cmp.Config{})
 	b.Main()
 <
+`b.Main()` also takes other goda.vim plugins, for one binary to serve them
+too: an input method whose completion sources are in this configuration,
+such as goda-skk.vim's (`b.Main(p)`).  A configuration error is shown by
+|goda_cmp#enable()| as usual, and the other plugins work meanwhile.
 Patches merge field by field: unset fields keep the previous value, maps are
 merged by key, slices are replaced.  Options named "_" are inherited by every
 source.  A name used but never added is reported when the binary starts.

@@ -55,6 +55,12 @@ endfunction
 
 " Build the user's config (a Go module in g:goda_cmp#config_dir). Needs Go.
 "
+" "go mod tidy" comes first, so that what a "go get" left out of go.sum (the
+" requirements of a new extension) is there. It needs the network for what is
+" not in the module cache yet, and may fail where the build would not
+" (offline, for the tests of a dependency): its failure is told only when
+" the build fails too.
+"
 " If completion is running it is stopped first and started again afterwards
 " with the new binary, so this is also what to run after the configuration or
 " an extension changed (see the README for an autocmd). When the build fails,
@@ -67,10 +73,14 @@ function! goda_cmp#build() abort
   let bin = s:default_bin()
   call mkdir(fnamemodify(bin, ':h'), 'p')
 
-  let was_enabled = exists('s:enabled')
-  call goda_cmp#disable()
   " One command, no cd and no &&: the latter differs between shells (cmd.exe,
   " PowerShell, sh). "go -C" runs go in that directory (Go 1.20 or later).
+  " Completion still runs meanwhile.
+  let tidy = system('go -C ' . shellescape(dir) . ' mod tidy')
+  let tidy_failed = v:shell_error
+
+  let was_enabled = exists('s:enabled')
+  call goda_cmp#disable()
   let out = system('go -C ' . shellescape(dir) . ' build -o ' . shellescape(bin) . ' .')
   let failed = v:shell_error
   if was_enabled
@@ -78,6 +88,7 @@ function! goda_cmp#build() abort
   endif
   if failed
     throw 'goda-cmp: go build failed:' . "\n" . out
+          \ . (tidy_failed ? "\n" . 'go mod tidy failed too:' . "\n" . tidy : '')
   endif
   echomsg 'goda-cmp: built ' . bin
 endfunction

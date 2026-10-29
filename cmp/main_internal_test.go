@@ -29,11 +29,22 @@ func TestMainPluginWithBadConfig(t *testing.T) {
 		}
 	}
 
+	// Other plugins are served as they are.
+	ps := b.mainPlugins([]sdk.Plugin{otherPlugin{}})
+	if len(ps) != 2 || ps[0].Name() != PluginName || ps[1].Name() != "other" {
+		t.Errorf("plugins = %v", ps)
+	}
+
 	ok := New().AddUI(stubUI{}).PatchGlobal(Config{UI: "stub"}).mainPlugin().Handlers()
 	if st, err := ok["status"](ctx, nil, nil); err != nil || st != "" {
 		t.Errorf("valid configuration: status = %v, %v", st, err)
 	}
 }
+
+type otherPlugin struct{}
+
+func (otherPlugin) Name() string                     { return "other" }
+func (otherPlugin) Handlers() map[string]sdk.Handler { return nil }
 
 // stubUI stands in for ext/ui/native, which this package cannot import.
 type stubUI struct{}
