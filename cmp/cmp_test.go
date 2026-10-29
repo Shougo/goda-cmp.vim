@@ -156,6 +156,44 @@ func TestMinAutoCompleteLengthAndManual(t *testing.T) {
 	}
 }
 
+// positionedSource says where its text starts: after the last "▽".
+type positionedSource struct{ fakeSource }
+
+func (positionedSource) CompletePosition(_ context.Context, _ sdk.Host, c *cmp.Context) int {
+	if i := strings.LastIndex(c.Input, "▽"); i >= 0 {
+		return i
+	}
+	return -1
+}
+
+// A CompletePositioner decides the completed lengths, not the keyword.
+func TestCompletePositioner(t *testing.T) {
+	b := newBuilder()
+	b.AddSource(positionedSource{fakeSource{name: "s", items: []string{"漢字"},
+		start: func(c *cmp.Context) int { return strings.LastIndex(c.Input, "▽") }}})
+	b.PatchGlobal(cmp.Config{
+		Sources: []string{"s"},
+		SourceOptions: map[string]cmp.SourceOption{
+			// No keyword at all before the cursor, nor of 3 characters.
+			"_": {KeywordPattern: "[ァ-ヮ]+", MinAutoCompleteLength: new(3)},
+		},
+	})
+	for i, c := range []struct {
+		input string
+		want  []string
+	}{
+		{"x▽かん", []string{"漢字"}},
+		{"x▽か", nil}, // shorter than 3: "▽か"
+		{"xかん", nil}, // nothing to complete
+	} {
+		h := uiHost()
+		complete(t, b, h, ctxMap(int64(i+1), c.input, ""))
+		if _, w := shown(t, h); !reflect.DeepEqual(w, c.want) {
+			t.Errorf("%q: words = %q, want %q", c.input, w, c.want)
+		}
+	}
+}
+
 // forceCompletionPattern overrides MinAutoCompleteLength (as in ddc.vim),
 // also for an empty word: "x." asks a source that completes after the dot.
 func TestForceCompletionPattern(t *testing.T) {

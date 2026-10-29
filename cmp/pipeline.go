@@ -334,10 +334,23 @@ func (r *runner) gatherOne(ctx context.Context, i int) {
 		return force || (n >= minLen && (maxLen <= 0 || n <= maxLen))
 	}
 
-	kw := sc.KeywordStart()
+	// Where the completed text starts: the keyword, or what the source
+	// says (CompletePositioner); -1 there is nothing to complete.
+	kw, positioned := sc.KeywordStart(), true
+	if cp, ok := src.(CompletePositioner); ok {
+		pos, err := sdk.Guard(ctx, func() (int, error) { return cp.CompletePosition(ctx, r.h, &sc), nil })
+		if err != nil || pos < 0 || pos > len(c.Input) {
+			if err != nil && ctx.Err() == nil {
+				log.Printf("cmp: source %s: completePosition: %v", name, err)
+			}
+			positioned = false
+		} else {
+			kw = pos
+		}
+	}
 	cacheKey := r.keys[name] + "\x00" + name
 	prev := e.cached(cacheKey, c, kw, deref(opt.CacheTimeout, 0))
-	valid := lengthOK(c.Input[kw:])
+	valid := positioned && lengthOK(c.Input[kw:])
 	retry := prev != nil && prev.incomplete && valid
 	if !valid && !retry {
 		if deref(opt.CacheTimeout, 0) <= 0 && prev != nil {

@@ -491,6 +491,11 @@ working:
 	EventHandler	Events, OnEvent: act on buffer events
 	Previewer	Preview: what to show in a preview window
 			(|goda-cmp-preview|)
+	CompletePositioner
+			CompletePosition: where the completed text starts,
+			instead of the keyword (keywordPattern), for the
+			completed lengths; -1 skips the source (ddc.vim's
+			getCompletePosition: the reading of an input method)
 	Configurable	WithParams: take parameters from Vim script
 			(|goda-cmp-params|); `cmp.PatchParams` does the
 			work for a Params struct with JSON tags

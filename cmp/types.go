@@ -192,6 +192,18 @@ func Collect(ctx context.Context, h sdk.Host, c *Context, s interface {
 	return last, err
 }
 
+// CompletePositioner is implemented by sources that know where the text
+// they complete starts, as ddc.vim's getCompletePosition: an input method's
+// reading, which no keywordPattern describes. CompletePosition returns the
+// byte offset in Context.Input, or -1 when there is nothing to complete
+// (the source is not asked then). The engine uses it instead of the keyword
+// for the completed lengths (minAutoCompleteLength and the others); the
+// source still answers its Gathered.Start. It is called for every request,
+// so it must be fast.
+type CompletePositioner interface {
+	CompletePosition(ctx context.Context, h sdk.Host, c *Context) int
+}
+
 // Initializer is implemented by sources that need to start something (a
 // connection, an index) before they can answer. Init runs once, in the
 // background of the first request that uses the source, and is bounded by
