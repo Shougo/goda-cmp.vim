@@ -19,26 +19,26 @@ jobs:
     steps:
       # The end-to-end tests expect goda.vim next to goda-cmp.vim, and run
       # with its latest version.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           path: goda-cmp.vim
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           repository: Shougo/goda.vim
           path: goda.vim
       # pum.vim itself, for the pum scenarios (in the editors new enough for
       # it; the others use the stand-in only).
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v7.0.1
         with:
           repository: Shougo/pum.vim
           path: pum.vim
       # The end-to-end tests run in every editor they find.
       - name: Install Vim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@v1.6.1
         with:
           version: stable
       - name: Install Neovim
-        uses: rhysd/action-setup-vim@v1
+        uses: rhysd/action-setup-vim@v1.6.1
         with:
           neovim: true
           version: stable
@@ -47,7 +47,7 @@ jobs:
         run: sudo apt-get install -y zsh
       # After the editors: installing them may put a directory with the
       # runner's own, older Go first in PATH.
-      - uses: actions/setup-go@v7
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: ${{ matrix.go }}
           cache-dependency-path: goda-cmp.vim/go.sum
@@ -78,8 +78,8 @@ jobs:
       # Keep the line endings of the repository (the embedded Vim and shell
       # scripts, and gofmt on Linux).
       - run: git config --global core.autocrlf false
-      - uses: actions/checkout@v7
-      - uses: actions/setup-go@v7
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-go@v7.0.0
         with:
           go-version: stable
       - run: go version
