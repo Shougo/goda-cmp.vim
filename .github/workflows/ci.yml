@@ -4,6 +4,9 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+
 jobs:
   test:
     name: go ${{ matrix.go }}
@@ -21,15 +24,18 @@ jobs:
       # with its latest version.
       - uses: actions/checkout@v7.0.1
         with:
+          persist-credentials: false
           path: goda-cmp.vim
       - uses: actions/checkout@v7.0.1
         with:
+          persist-credentials: false
           repository: Shougo/goda.vim
           path: goda.vim
       # pum.vim itself, for the pum scenarios (in the editors new enough for
       # it; the others use the stand-in only).
       - uses: actions/checkout@v7.0.1
         with:
+          persist-credentials: false
           repository: Shougo/pum.vim
           path: pum.vim
       # The end-to-end tests run in every editor they find.
@@ -79,6 +85,8 @@ jobs:
       # scripts, and gofmt on Linux).
       - run: git config --global core.autocrlf false
       - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - uses: actions/setup-go@v7.0.0
         with:
           go-version: stable
