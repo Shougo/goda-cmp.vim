@@ -93,7 +93,10 @@ function! goda_cmp#build() abort
   echomsg 'goda-cmp: built ' . bin
 endfunction
 
-" Start the plugin binary and begin completing in insert mode.
+" Begin completing. The binary is not started here, in the way of Vim's
+" startup (at VimEnter), but once Vim waits for keys, or before when it is
+" needed first (entering insert mode, the command line or a terminal job,
+" see s:boot()); and started again when it stopped or exited.
 function! goda_cmp#enable() abort
   if exists('s:enabled')
     return
@@ -105,31 +108,15 @@ function! goda_cmp#enable() abort
     echohl None
     return
   endif
-  let plugins = goda#start(s:default_bin())
-  if index(plugins, 'cmp') < 0
-    " Stop only the binary just started (through one of its plugins), not
-    " the binaries of other plugins.
-    if !empty(plugins)
-      call goda#stop(plugins[0])
-    endif
-    throw 'goda-cmp: ' . s:default_bin() . ' does not contain the "cmp" plugin'
-  endif
-  " A binary built from an invalid configuration starts anyway and says why.
-  try
-    let status = goda#request('cmp', 'status')
-  catch
-    let status = ''  " a binary from before cmp.status
-  endtry
-  if type(status) == v:t_string && status !=# ''
-    call goda#stop('cmp')
-    throw 'goda-cmp: fix the configuration in ' . s:config_dir()
-          \ . ' and run goda_cmp#build(): ' . status
-  endif
+  " (Again after a build: a start that failed is tried again.)
+  call goda#register('cmp', function('s:start'))
+  silent! unlet s:boot_failed
   let s:enabled = 1
   let s:registered = {}
   let s:opts = {}
   augroup goda_cmp
     autocmd!
+    autocmd InsertEnter * call s:boot()
     autocmd InsertLeave * call goda_cmp#hide('InsertLeave')
     " The events of autoCompleteEvents are listened to as the settings of
     " a buffer become known.
@@ -142,8 +129,75 @@ function! goda_cmp#enable() abort
     autocmd CmdlineLeave * if s:input_cmdline()
           \ | call goda_cmp#hide('CmdlineLeave') | endif
   augroup END
-  call s:register_events()
-  call s:setup_events()
+  " Soon, for the sources that listen to buffer events (cmp.EventHandler):
+  " they hear about the buffers entered from then on.
+  call timer_start(0, {-> exists('s:booted') ? 0 : s:boot()})
+endfunction
+
+" Start the binary: goda.vim calls it when a request needs the plugin "cmp"
+" and no binary serves it (not started yet, stopped, or exited). Then the
+" events of the configuration are listened to.
+function! s:start() abort
+  let bin = s:default_bin()
+  if !executable(bin)
+    throw 'goda-cmp: ' . bin . ' does not exist yet; build it with: call goda_cmp#build()'
+  endif
+  let plugins = goda#start(bin)
+  if index(plugins, 'cmp') < 0
+    " Stop only the binary just started (through one of its plugins), not
+    " the binaries of other plugins.
+    if !empty(plugins)
+      call goda#stop(plugins[0])
+    endif
+    throw 'goda-cmp: ' . bin . ' does not contain the "cmp" plugin'
+  endif
+  " A binary built from an invalid configuration starts anyway and says why.
+  try
+    let status = goda#request('cmp', 'status')
+  catch
+    let status = ''  " a binary from before cmp.status
+  endtry
+  if type(status) == v:t_string && status !=# ''
+    call goda#stop('cmp')
+    throw 'goda-cmp: fix the configuration in ' . s:config_dir()
+          \ . ' and run goda_cmp#build(): ' . status
+  endif
+  if exists('s:enabled')
+    let s:registered = {}
+    let s:opts = {}
+    call s:register_events()
+    call s:setup_events()
+  endif
+endfunction
+
+" Is the binary running, started now if it is not? A start that fails is
+" told once: completion does nothing until goda_cmp#build() or
+" goda_cmp#enable() (after goda_cmp#disable()).
+function! s:boot() abort
+  if !exists('s:enabled') || exists('s:boot_failed')
+    return 0
+  endif
+  if goda#is_running('cmp')
+    let s:booted = 1
+    return 1
+  endif
+  try
+    " The request starts it (goda#register()).
+    call goda#request('cmp', 'status')
+    let s:booted = 1
+  catch /^goda: \%(unknown plugin\|.* is not running\)/
+    " Not started (goda#stop() is running, say): perhaps the next time.
+    return 0
+  catch
+    let s:boot_failed = 1
+    echohl ErrorMsg
+    for line in split(substitute(v:exception, '^goda: ', '', ''), "\n")
+      echomsg line
+    endfor
+    echohl None
+    return 0
+  endtry
+  return 1
 endfunction
 
 function! goda_cmp#disable() abort
@@ -570,7 +624,7 @@ endfunction
 " EXTRA: more keys of the request ("options", "hide", "update").
 function! s:send(manual, event, ...) abort
   let s:timer = -1
-  if s:mode() ==# '' || !goda#is_running('cmp')
+  if s:mode() ==# '' || !s:boot()
     return
   endif
   call goda#notify('cmp', 'complete', extend(s:context(a:manual, a:event), a:0 ? a:1 : {}))
@@ -588,7 +642,7 @@ let s:prev_input = ''
 let s:skip_next = 0
 
 function! s:on_change(event) abort
-  if !goda#is_running('cmp') || s:mode() ==# ''
+  if s:mode() ==# '' || !s:boot()
     return
   endif
   let input = s:input()
@@ -688,7 +742,7 @@ endfunction
 " Act as if the autocmd {event} happened: the sources that listen to it hear
 " about it, and it completes when it is in autoCompleteEvents.
 function! goda_cmp#on_event(event) abort
-  if !exists('s:enabled') || !goda#is_running('cmp')
+  if !s:boot()
     return
   endif
   if has_key(s:event_fts, a:event)

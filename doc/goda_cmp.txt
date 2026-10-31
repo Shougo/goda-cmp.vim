@@ -89,11 +89,15 @@ goda_cmp#build()
 
                                                            *goda_cmp#enable()*
 goda_cmp#enable()
-		Start the binary and begin completing in insert mode.  When
-		the binary does not exist yet a hint is shown instead.  When
-		it was built from a configuration with errors (an unknown
-		filter, say), it throws with those errors and stops the
-		binary.
+		Begin completing in insert mode.  The binary is not started
+		yet, so that Vim starts as fast as without goda-cmp: it is
+		started once Vim waits for keys, or before when it is needed
+		first (entering insert mode, the command line or a terminal
+		job); and started again when it stopped or exited.  When the binary does not exist yet a
+		hint is shown instead.  When the start fails (a
+		configuration with errors, an unknown filter, say), the
+		errors are shown once, the binary is stopped, and nothing is
+		completed until |goda_cmp#build()|.
 
                                                           *goda_cmp#disable()*
 goda_cmp#disable()
@@ -296,8 +300,8 @@ The configuration is Go code; see `examples/config`.  Its shape mirrors
 <
 `b.Main()` also takes other goda.vim plugins, for one binary to serve them
 too: an input method whose completion sources are in this configuration,
-such as goda-skk.vim's (`b.Main(p)`).  A configuration error is shown by
-|goda_cmp#enable()| as usual, and the other plugins work meanwhile.
+such as goda-skk.vim's (`b.Main(p)`).  A configuration error is shown when
+the binary starts as usual, and the other plugins work meanwhile.
 Patches merge field by field: unset fields keep the previous value, maps are
 merged by key, slices are replaced.  Options named "_" are inherited by every
 source.  A name used but never added is reported when the binary starts.

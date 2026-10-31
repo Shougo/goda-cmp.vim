@@ -206,7 +206,8 @@ func TestRealEvents(t *testing.T) {
 }
 
 // TestRealBadConfig: a binary built from an invalid configuration starts,
-// and goda_cmp#enable() throws with the reason instead of a handshake error.
+// and its first start (entering insert mode after goda_cmp#enable()) tells
+// the reason instead of a handshake error, once.
 func TestRealBadConfig(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a binary and starts an editor")
@@ -220,12 +221,10 @@ func TestRealBadConfig(t *testing.T) {
 		vimscript := `set nocompatible
 let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . ',' . &runtimepath
 let g:goda_cmp#binary = $GODA_CMP_BIN
-try
-  call goda_cmp#enable()
-  let s:r = ['no error']
-catch
-  let s:r = [v:exception]
-endtry
+call goda_cmp#enable()
+let s:r = ['started=' . goda#is_running('cmp')]
+call add(s:r, execute('doautocmd InsertEnter'))
+call add(s:r, 'again=' . execute('doautocmd InsertEnter'))
 call add(s:r, 'running=' . goda#is_running('cmp'))
 call writefile(s:r, $GODA_OUT)
 qa!
@@ -244,8 +243,14 @@ qa!
 		}
 		got := string(b)
 		t.Logf("%s", got)
+		if !strings.Contains(got, "started=0") {
+			t.Errorf("goda_cmp#enable() must not start the binary:\n%s", got)
+		}
 		if !strings.Contains(got, "fix the configuration") || !strings.Contains(got, `unknown filter "matcher_head"`) {
-			t.Errorf("enable() did not report the configuration error:\n%s", got)
+			t.Errorf("the start did not report the configuration error:\n%s", got)
+		}
+		if strings.Count(got, "fix the configuration") != 1 || !strings.Contains(got, "again=\n") {
+			t.Errorf("the error must be told once:\n%s", got)
 		}
 		if !strings.Contains(got, "running=0") {
 			t.Errorf("the binary was left running:\n%s", got)
@@ -253,8 +258,56 @@ qa!
 	})
 }
 
-// TestRealNoCmpPlugin: goda_cmp#enable() with a binary that has no "cmp"
-// plugin stops that binary only, not the binaries of other plugins.
+// TestRealLazyStart: goda_cmp#enable() does not start the binary; entering
+// insert mode does, and does again once it stopped.
+func TestRealLazyStart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	bin := e2e.BuildConfig(t, "testdata/eventcfg")
+	repo, godaRoot := e2e.Roots(t)
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		dir := t.TempDir()
+		out := filepath.Join(dir, "out.txt")
+		script := filepath.Join(dir, "test.vim")
+		vimscript := `set nocompatible
+let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . ',' . &runtimepath
+let g:goda_cmp#binary = $GODA_CMP_BIN
+call goda_cmp#enable()
+let s:r = ['enabled=' . goda#is_running('cmp')]
+doautocmd InsertEnter
+call add(s:r, 'insert=' . goda#is_running('cmp'))
+call goda#stop('cmp')
+call add(s:r, 'stopped=' . goda#is_running('cmp'))
+doautocmd InsertEnter
+call add(s:r, 'again=' . goda#is_running('cmp'))
+call goda_cmp#disable()
+doautocmd InsertEnter
+call add(s:r, 'disabled=' . goda#is_running('cmp'))
+call writefile(s:r, $GODA_OUT)
+qa!
+`
+		if err := os.WriteFile(script, []byte(vimscript), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		cmd := exec.Command(ed.Bin, ed.Headless(script)...)
+		cmd.Env = append(os.Environ(), "GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_CMP_BIN="+bin, "GODA_OUT="+out,
+			"GODA_EVENT_FILE="+filepath.Join(dir, "events.txt"))
+		if b, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("vim: %v\n%s", err, b)
+		}
+		b, err := os.ReadFile(out)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(b), "enabled=0\ninsert=1\nstopped=0\nagain=1\ndisabled=0\n"; got != want {
+			t.Errorf("got:\n%s\nwant:\n%s", got, want)
+		}
+	})
+}
+
+// TestRealNoCmpPlugin: starting a binary that has no "cmp" plugin stops that
+// binary only, not the binaries of other plugins.
 func TestRealNoCmpPlugin(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a binary and starts an editor")
@@ -281,12 +334,8 @@ func TestRealNoCmpPlugin(t *testing.T) {
 let &runtimepath = $GODA_RTP . ',' . $GODA_CMP_RTP . ',' . &runtimepath
 let g:goda_cmp#binary = $GODA_CMP_BIN
 call goda#start($GODA_BYSTANDER)
-try
-  call goda_cmp#enable()
-  let s:r = ['no error']
-catch
-  let s:r = [v:exception]
-endtry
+call goda_cmp#enable()
+let s:r = [execute('doautocmd InsertEnter')]
 call add(s:r, 'wrong=' . goda#is_running('wrong'))
 call add(s:r, 'bystander=' . goda#is_running('bystander'))
 call writefile(s:r, $GODA_OUT)
@@ -309,7 +358,7 @@ qa!
 		got := string(b)
 		t.Logf("%s", got)
 		if !strings.Contains(got, `does not contain the "cmp" plugin`) {
-			t.Errorf("enable() did not refuse the binary:\n%s", got)
+			t.Errorf("the start did not refuse the binary:\n%s", got)
 		}
 		if !strings.Contains(got, "wrong=0") || !strings.Contains(got, "bystander=1") {
 			t.Errorf("the wrong binary must stop and the other one keep running:\n%s", got)
