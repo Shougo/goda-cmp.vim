@@ -65,7 +65,7 @@ func (s source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gat
 	}
 	start := c.KeywordStart()
 	// The text of the shell line before the word (the prompt left out when
-	// the input comes from ddt.vim).
+	// the input comes from goda-term.vim or ddt.vim).
 	before := input[:max(0, len(input)-(len(c.Input)-start))]
 	items := make([]cmp.Item, 0, len(hist))
 	for _, w := range hist {
@@ -76,14 +76,20 @@ func (s source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gat
 	return cmp.Gathered{Start: start, Items: items}, nil
 }
 
+// shellInputExpr is the input of a buffer of goda-term.vim, ddt.vim or
+// deol.nvim ([input]), or [] in another buffer.
+const shellInputExpr = "get(b:, 'goda_term_name', '') !=# '' && exists('*goda_term#get_input')" +
+	" ? [goda_term#get_input(b:goda_term_name)]" +
+	" : &l:filetype ==# 'deol' && exists('*deol#get_input') ? [deol#get_input()]" +
+	" : get(b:, 'ddt_ui_name', '') !=# '' && exists('*ddt#get_input') ? [ddt#get_input(b:ddt_ui_name)] : []"
+
 // ShellInput is the shell line before the cursor: Context.Input, or in a
-// ddt.vim or deol.nvim buffer, what they say the input is.
+// goda-term.vim, ddt.vim or deol.nvim buffer, what they say the input is.
 func ShellInput(ctx context.Context, h sdk.Host, c *cmp.Context) (string, error) {
 	if c.Mode == "c" {
 		return c.Input, nil
 	}
-	v, err := h.Eval(ctx, "&l:filetype ==# 'deol' && exists('*deol#get_input') ? [deol#get_input()]"+
-		" : get(b:, 'ddt_ui_name', '') !=# '' && exists('*ddt#get_input') ? [ddt#get_input(b:ddt_ui_name)] : []")
+	v, err := h.Eval(ctx, shellInputExpr)
 	if err != nil {
 		return c.Input, nil // not worth failing for
 	}

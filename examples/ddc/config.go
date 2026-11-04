@@ -121,7 +121,7 @@ func configure(b *cmp.Builder) {
 	})
 
 	// Shells and terminals.
-	b.PatchFiletypes([]string{"zsh", "sh", "bash", "ddt-shell", "ddt-terminal"}, cmp.Config{
+	b.PatchFiletypes([]string{"zsh", "sh", "bash", "goda-term-shell", "goda-term-terminal"}, cmp.Config{
 		SpecialBufferCompletion: new(true),
 		SourceOptions: map[string]cmp.SourceOption{
 			"_": {KeywordPattern: `[0-9a-zA-Z_./#:-]*`},
