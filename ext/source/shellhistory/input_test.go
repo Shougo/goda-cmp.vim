@@ -1,11 +1,13 @@
 package shellhistory
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // shellInputExpr in a real Vim: the input of goda-term.vim, of ddt.vim, or
@@ -32,18 +34,25 @@ func TestShellInputExpr(t *testing.T) {
 execute 'set runtimepath^=' . fnameescape(` + vimQuote(dir) + `)
 runtime autoload/goda_term.vim
 runtime autoload/ddt.vim
-let s:out = [string(eval(` + vimQuote(shellInputExpr) + `))]
-let b:ddt_ui_name = 'd'
-call add(s:out, string(eval(` + vimQuote(shellInputExpr) + `)))
-let b:goda_term_name = 'g'
-call add(s:out, string(eval(` + vimQuote(shellInputExpr) + `)))
+try
+  let s:out = [string(eval(` + vimQuote(shellInputExpr) + `))]
+  let b:ddt_ui_name = 'd'
+  call add(s:out, string(eval(` + vimQuote(shellInputExpr) + `)))
+  let b:goda_term_name = 'g'
+  call add(s:out, string(eval(` + vimQuote(shellInputExpr) + `)))
+catch
+  let s:out = ['error', v:throwpoint, v:exception]
+endtry
 call writefile(s:out, ` + vimQuote(out) + `)
 qall!
 `
 	if err := os.WriteFile(script, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	cmd := exec.Command(vim, "-N", "-u", "NONE", "-i", "NONE", "-n", "--not-a-term", "-S", script)
+	// Ex mode (-es): Vim waits for no terminal (on Windows it did, forever).
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, vim, "-N", "-u", "NONE", "-i", "NONE", "-n", "-es", "-S", script)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("%v: %s", err, b)
 	}
