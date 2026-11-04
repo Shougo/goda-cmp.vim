@@ -187,12 +187,9 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 var requestKeys = []string{"patches", "options", "hide", "update"}
 
 func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	if len(params) == 0 {
-		return nil, fmt.Errorf("cmp.complete needs a context dictionary")
-	}
-	raw, ok := params[0].(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("cmp.complete needs a context dictionary, got %T", params[0])
+	var raw map[string]any
+	if err := sdk.DecodeArgs(params, &raw); err != nil {
+		return nil, fmt.Errorf("cmp.complete needs a context dictionary: %w", err)
 	}
 	var c Context
 	plain := make(map[string]any, len(raw))
@@ -483,10 +480,10 @@ func (e *engine) remember(c *Context, timeout time.Duration, ui UI, items []Item
 }
 
 func (e *engine) lookup(params []any) (Item, *shown, error) {
-	if len(params) == 0 {
-		return Item{}, nil, fmt.Errorf("a reference is needed")
+	var ref string
+	if err := sdk.DecodeArgs(params, &ref); err != nil {
+		return Item{}, nil, fmt.Errorf("a reference is needed: %w", err)
 	}
-	ref, _ := params[0].(string)
 	idStr, idxStr, ok := strings.Cut(ref, ":")
 	id, err1 := strconv.ParseInt(idStr, 10, 64)
 	idx, err2 := strconv.Atoi(idxStr)
@@ -688,18 +685,16 @@ func (e *engine) Close(ctx context.Context) error {
 }
 
 // scope reads the (filetype, patches) arguments that several handlers take,
-// from position i on, and resolves the configuration.
-func (e *engine) scope(params []any, i int) (Config, Aliases, error) {
-	ft := ""
-	if len(params) > i {
-		ft, _ = params[i].(string)
+// and resolves the configuration.
+func (e *engine) scope(params []any) (Config, Aliases, error) {
+	var ft string
+	var patches any
+	if err := sdk.DecodeArgs(params, sdk.Optional(&ft), sdk.Optional(&patches)); err != nil {
+		return Config{}, Aliases{}, err
 	}
-	var rt Patches
-	if len(params) > i+1 {
-		var err error
-		if rt, err = decodePatches(params[i+1]); err != nil {
-			return Config{}, Aliases{}, err
-		}
+	rt, err := decodePatches(patches)
+	if err != nil {
+		return Config{}, Aliases{}, err
 	}
 	return e.b.resolve(ft, rt), rt.Aliases, nil
 }
@@ -713,7 +708,7 @@ func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error
 	e.mu.Unlock()
 	e.setVisible(false)
 	e.setLast(nil)
-	cfg, al, err := e.scope(params, 0)
+	cfg, al, err := e.scope(params)
 	if err != nil {
 		return nil, err
 	}
@@ -740,7 +735,7 @@ func (e *engine) hideShownUI(ctx context.Context, h sdk.Host, ui UI) {
 }
 
 func (e *engine) options(_ context.Context, _ sdk.Host, params []any) (any, error) {
-	cfg, _, err := e.scope(params, 0)
+	cfg, _, err := e.scope(params)
 	if err != nil {
 		return nil, err
 	}
@@ -762,7 +757,7 @@ func (e *engine) options(_ context.Context, _ sdk.Host, params []any) (any, erro
 }
 
 func (e *engine) current(_ context.Context, _ sdk.Host, params []any) (any, error) {
-	cfg, _, err := e.scope(params, 0)
+	cfg, _, err := e.scope(params)
 	if err != nil {
 		return nil, err
 	}
@@ -770,7 +765,7 @@ func (e *engine) current(_ context.Context, _ sdk.Host, params []any) (any, erro
 }
 
 func (e *engine) visibleHandler(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	cfg, al, err := e.scope(params, 0)
+	cfg, al, err := e.scope(params)
 	if err != nil {
 		return nil, err
 	}
@@ -786,10 +781,10 @@ func (e *engine) visibleHandler(ctx context.Context, h sdk.Host, params []any) (
 
 // showLast shows the last list again with another UI (ddc#map#complete()).
 func (e *engine) showLast(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	if len(params) == 0 {
-		return nil, fmt.Errorf("cmp.show needs a ui name")
+	var name string
+	if err := sdk.DecodeArgs(params, &name); err != nil {
+		return nil, fmt.Errorf("cmp.show needs a ui name: %w", err)
 	}
-	name, _ := params[0].(string)
 	e.mu.Lock()
 	l := e.last
 	e.mu.Unlock()
@@ -815,26 +810,22 @@ func (e *engine) showLast(ctx context.Context, h sdk.Host, params []any) (any, e
 }
 
 func (e *engine) validate(_ context.Context, _ sdk.Host, params []any) (any, error) {
-	if len(params) == 0 {
-		return nil, fmt.Errorf("cmp.validate needs a config dictionary")
+	// The third argument is the scope of the patch: "global", "filetype"
+	// or "buffer".
+	var rawCfg, rawAliases any
+	var scope string
+	if err := sdk.DecodeArgs(params, &rawCfg, sdk.Optional(&rawAliases), sdk.Optional(&scope)); err != nil {
+		return nil, fmt.Errorf("cmp.validate needs a config dictionary: %w", err)
 	}
-	cfg, err := decodeConfig(params[0])
+	cfg, err := decodeConfig(rawCfg)
 	if err != nil {
 		return nil, err
 	}
-	var al Aliases
-	if len(params) > 1 {
-		if al, err = decodeAliases(params[1]); err != nil {
-			return nil, err
-		}
+	al, err := decodeAliases(rawAliases)
+	if err != nil {
+		return nil, err
 	}
-	// The third argument is the scope of the patch: "global", "filetype"
-	// or "buffer".
-	filetype := false
-	if len(params) > 2 {
-		scope, _ := params[2].(string)
-		filetype = scope == "filetype"
-	}
+	filetype := scope == "filetype"
 	if errs := e.b.checkConfig("config", cfg, al, filetype); len(errs) > 0 {
 		return nil, fmt.Errorf("%s", joinErrs(errs))
 	}

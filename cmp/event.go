@@ -274,12 +274,9 @@ func (e *engine) eventsHandler(context.Context, sdk.Host, []any) (any, error) {
 }
 
 func (e *engine) event(_ context.Context, h sdk.Host, params []any) (any, error) {
-	if len(params) == 0 {
-		return nil, fmt.Errorf("cmp.event needs an event dictionary")
-	}
 	var ev Event
-	if err := sdk.Decode(params[0], &ev); err != nil {
-		return nil, err
+	if err := sdk.DecodeArgs(params, &ev); err != nil {
+		return nil, fmt.Errorf("cmp.event needs an event dictionary: %w", err)
 	}
 	e.ev.add(h, ev)
 	return nil, nil
