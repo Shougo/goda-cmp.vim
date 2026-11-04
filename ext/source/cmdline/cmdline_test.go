@@ -58,6 +58,7 @@ func TestGather(t *testing.T) {
 		"help buf":    {"buffers", "bufexists()", "nobuf", "Buffers"},
 		"e **/foo":    {"a/foo.txt", "b/foobar/", "c/other.txt"},
 		"call goda_c": {"goda_cmp#enable(", "goda_cmp#disable("},
+		"tloc":        {"setlocal"},
 	})
 	for _, c := range []struct {
 		input       string
@@ -77,6 +78,8 @@ func TestGather(t *testing.T) {
 		// directory by its whole path without the slash, as the original).
 		{"e **/foo", 5, []string{"a/foo.txt"}, []string{""}},
 		{"call goda_c", 5, []string{"goda_cmp#enable(", "goda_cmp#disable("}, []string{"", ""}},
+		// Fuzzy matched ("fuzzy" in 'wildoptions'): kept as they are.
+		{"tloc", 0, []string{"setlocal"}, []string{""}},
 	} {
 		start, words, abbr := gather(t, h, cmdline(c.input, ":"))
 		if start != c.start || !reflect.DeepEqual(words, c.words) || !reflect.DeepEqual(abbr, c.abbr) {

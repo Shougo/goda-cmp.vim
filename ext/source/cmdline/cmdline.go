@@ -104,9 +104,12 @@ func (source) Gather(ctx context.Context, h sdk.Host, c *cmp.Context) (cmp.Gathe
 
 	results = trimCommonPrefix(results, input, completeStr)
 
-	// "**/foo.txt" must match "foo.txt".
+	// "**/foo.txt" must match "foo.txt". Only for a path (the argument has
+	// "/"): other results are what getcompletion() matched, fuzzy with
+	// "fuzzy" in 'wildoptions'.
+	arg := input[strings.LastIndexAny(input, " \t")+1:]
 	suffix := strings.ToLower(completeStr[strings.LastIndex(completeStr, "/")+1:])
-	if suffix != "" {
+	if suffix != "" && strings.Contains(arg, "/") {
 		kept := results[:0]
 		for _, w := range results {
 			var rs string
