@@ -13,6 +13,11 @@ import (
 // shellInputExpr in a real Vim: the input of goda-term.vim, of ddt.vim, or
 // none.
 func TestShellInputExpr(t *testing.T) {
+	// As the test of the source vim: -short is without editors (the vim
+	// on the PATH of Windows CI is the one of Git, which does not run it).
+	if testing.Short() {
+		t.Skip("starts Vim")
+	}
 	vim, err := exec.LookPath("vim")
 	if err != nil {
 		t.Skip("no vim")
