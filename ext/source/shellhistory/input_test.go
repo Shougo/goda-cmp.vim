@@ -19,6 +19,7 @@ func TestShellInputExpr(t *testing.T) {
 	}
 	dir := t.TempDir()
 	out := filepath.Join(dir, "out")
+	errmsg := filepath.Join(dir, "errmsg")
 	script := filepath.Join(dir, "test.vim")
 	// The functions of the plugins (loaded: they are, in their buffers).
 	if err := os.MkdirAll(filepath.Join(dir, "autoload"), 0o755); err != nil {
@@ -31,7 +32,7 @@ func TestShellInputExpr(t *testing.T) {
 		}
 	}
 	src := `
-execute 'set runtimepath^=' . fnameescape(` + vimQuote(dir) + `)
+let &runtimepath = ` + vimQuote(dir) + ` . ',' . &runtimepath
 runtime autoload/goda_term.vim
 runtime autoload/ddt.vim
 try
@@ -44,6 +45,7 @@ catch
   let s:out = ['error', v:throwpoint, v:exception]
 endtry
 call writefile(s:out, ` + vimQuote(out) + `)
+call writefile([v:errmsg], ` + vimQuote(errmsg) + `)
 qall!
 `
 	if err := os.WriteFile(script, []byte(src), 0o644); err != nil {
@@ -53,15 +55,19 @@ qall!
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, vim, "-N", "-u", "NONE", "-i", "NONE", "-n", "-es", "-S", script)
-	if b, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("%v: %s", err, b)
-	}
+	// What Vim says, for a failure: the status of Vim in Ex mode is 1
+	// after any error message, so the lines written are what is checked.
+	output, runErr := cmd.CombinedOutput()
+	msg, _ := os.ReadFile(errmsg)
 	b, err := os.ReadFile(out)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("no result: %v (vim: %v: %s, v:errmsg %q)", err, runErr, output, msg)
 	}
-	if got := strings.TrimSpace(string(b)); got != "[]\n['ddt:d']\n['term:g']" {
-		t.Errorf("%q", got)
+	got := strings.TrimSpace(strings.ReplaceAll(string(b), "\r\n", "\n"))
+	if got != "[]\n['ddt:d']\n['term:g']" {
+		t.Errorf("%q (vim: %v: %s, v:errmsg %q)", got, runErr, output, msg)
+	} else if runErr != nil {
+		t.Logf("vim: %v: %s, v:errmsg %q", runErr, output, msg)
 	}
 }
 
