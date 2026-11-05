@@ -37,7 +37,7 @@ editor type-checks and completes the configuration.
 INSTALL                                                     *goda-cmp-install*
 
 Requirements: Go 1.26 or later; Vim 9.1 or later (|+job| |+channel|
-|+timers|) or Neovim; goda.vim; pum.vim if you want the pum popup.
+|+timers|) or Neovim 0.11 or later; goda.vim; pum.vim if you want the pum popup.
 
 1. Install goda.vim and goda-cmp.vim with your plugin manager.
 
