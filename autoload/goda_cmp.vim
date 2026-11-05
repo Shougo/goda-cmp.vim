@@ -6,6 +6,11 @@
 " editor themselves, and their Vim script (autoload/goda_cmp/ui/*.vim, for
 " instance) calls the goda_cmp#_* receivers below. Nothing here calls theirs.
 
+" The version of this Vim script that the binary goes with (ScriptVersion of
+" its Go side): goda.vim refuses a binary of another one, and says to build
+" it again. Bumped with it when they no longer work together.
+let s:version = #{version: 1, module: 'github.com/Shougo/goda-cmp.vim'}
+
 let s:seq = 0
 let s:timer = -1
 let s:last = []        " [bufnr, lnum, input] of the last request ("c" for lnum
@@ -109,7 +114,7 @@ function! goda_cmp#enable() abort
     return
   endif
   " (Again after a build: a start that failed is tried again.)
-  call goda#register('cmp', function('s:start'))
+  call goda#register('cmp', function('s:start'), s:version)
   silent! unlet s:boot_failed
   let s:enabled = 1
   let s:registered = {}

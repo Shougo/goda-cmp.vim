@@ -123,6 +123,14 @@ func (e *engine) uiFor(cfg Config, al Aliases, name string) (UI, error) {
 
 func (e *engine) Name() string { return PluginName }
 
+// ScriptVersion is the version of the Vim script (autoload/goda_cmp.vim) this
+// binary goes with (sdk.ScriptVersioner): goda.vim refuses a binary of
+// another one and says to build it again. Bump it with s:version there when
+// the Vim script and the binary no longer work together.
+const ScriptVersion = 1
+
+func (e *engine) ScriptVersion() int { return ScriptVersion }
+
 func (e *engine) Handlers() map[string]sdk.Handler {
 	return map[string]sdk.Handler{
 		// complete(context): run the pipeline and show the result. Meant to
