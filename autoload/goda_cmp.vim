@@ -58,7 +58,8 @@ function! s:config_dir() abort
   return (has('nvim') ? stdpath('config') : expand('~/.vim')) . '/goda-cmp'
 endfunction
 
-" Build the user's config (a Go module in g:goda_cmp#config_dir). Needs Go.
+" Build the user's config (a Go module in g:goda_cmp#config_dir) with
+" goda#build(): with the plugins installed (g:goda#workspace). Needs Go.
 "
 " "go mod tidy" comes first, so that what a "go get" left out of go.sum (the
 " requirements of a new extension) is there. It needs the network for what is
@@ -71,31 +72,15 @@ endfunction
 " an extension changed (see the README for an autocmd). When the build fails,
 " the previous binary keeps running.
 function! goda_cmp#build() abort
-  let dir = s:config_dir()
-  if !isdirectory(dir)
-    throw 'goda-cmp: no config directory: ' . dir
-  endif
-  let bin = s:default_bin()
-  call mkdir(fnamemodify(bin, ':h'), 'p')
-
-  " One command, no cd and no &&: the latter differs between shells (cmd.exe,
-  " PowerShell, sh). "go -C" runs go in that directory (Go 1.20 or later).
-  " Completion still runs meanwhile.
-  let tidy = system('go -C ' . shellescape(dir) . ' mod tidy')
-  let tidy_failed = v:shell_error
-
   let was_enabled = exists('s:enabled')
   call goda_cmp#disable()
-  let out = system('go -C ' . shellescape(dir) . ' build -o ' . shellescape(bin) . ' .')
-  let failed = v:shell_error
-  if was_enabled
-    call goda_cmp#enable()
-  endif
-  if failed
-    throw 'goda-cmp: go build failed:' . "\n" . out
-          \ . (tidy_failed ? "\n" . 'go mod tidy failed too:' . "\n" . tidy : '')
-  endif
-  echomsg 'goda-cmp: built ' . bin
+  try
+    call goda#build(#{name: 'cmp', dir: s:config_dir(), bin: s:default_bin()})
+  finally
+    if was_enabled
+      call goda_cmp#enable()
+    endif
+  endtry
 endfunction
 
 " Begin completing. The binary is not started here, in the way of Vim's

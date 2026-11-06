@@ -71,7 +71,9 @@ update goda.vim, goda-cmp.vim or an extension: >
 
 	go get -u github.com/Shougo/goda-cmp.vim github.com/Shougo/goda.vim
 <
-and |goda_cmp#build()| (which runs `go mod tidy` first).  To build whenever you save the configuration: >vim
+and |goda_cmp#build()| (which runs `go mod tidy` first).  With
+|g:goda#workspace| (goda-pm.vim sets it), the build uses goda.vim, goda-cmp.vim
+and the extensions installed, and `go get -u` is not needed.  To build whenever you save the configuration: >vim
 
 	autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#build()
 <
@@ -80,7 +82,8 @@ FUNCTIONS                                                 *goda-cmp-functions*
 
                                                             *goda_cmp#build()*
 goda_cmp#build()
-		Run `go mod tidy` and `go build` in |g:goda_cmp#config_dir|.
+		Run `go mod tidy` and `go build` in |g:goda_cmp#config_dir|
+		(|goda#build()|).
 		When completion is running it is stopped first and started
 		again with the new binary.  When the build fails the error is
 		thrown (with that of `go mod tidy`, when it failed too: it
