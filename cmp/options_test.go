@@ -71,6 +71,7 @@ func call(t *testing.T, p sdk.Plugin, h sdk.Host, c map[string]any) {
 	if _, err := p.Handlers()["complete"](context.Background(), h, []any{c}); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
+	cmp.WaitGathering(p)
 }
 
 // What a source gathered is filtered again while the word is typed on, and

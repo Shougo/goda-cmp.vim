@@ -75,7 +75,9 @@ func TestSupersededShowsNothing(t *testing.T) {
 	complete(3)
 	close(release)
 	wg.Wait()
+	cmp.WaitGathering(p)
 	complete(4)
+	cmp.WaitGathering(p)
 
 	mu.Lock()
 	defer mu.Unlock()

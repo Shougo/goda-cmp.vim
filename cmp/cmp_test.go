@@ -78,6 +78,7 @@ func complete(t *testing.T, b *cmp.Builder, h sdk.Host, c map[string]any) {
 	if _, err := p.Handlers()["complete"](context.Background(), h, []any{c}); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
+	cmp.WaitGathering(p)
 }
 
 // shown returns the words of the last Show, and its column.
@@ -335,6 +336,7 @@ func TestSupersededRequestIsDropped(t *testing.T) {
 		if _, err := p.Handlers()["complete"](context.Background(), h, []any{ctxMap(seq, "x", "")}); err != nil {
 			t.Fatal(err)
 		}
+		cmp.WaitGathering(p)
 	}
 	serve(5)
 	n := len(h.Calls())
@@ -434,6 +436,7 @@ func TestUpdateInfo(t *testing.T) {
 	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
 		t.Fatal(err)
 	}
+	cmp.WaitGathering(p)
 	if _, err := p.Handlers()["select"](ctx, h, []any{"1:0"}); err != nil {
 		t.Fatal(err)
 	}
