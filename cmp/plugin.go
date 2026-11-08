@@ -355,6 +355,9 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 			name, err := sdk.Guard(ctx, func() (string, error) {
 				return cfg.DynamicUI(ctx, h, DynamicUIArgs{Context: &c, Items: items})
 			})
+			if ctx.Err() != nil {
+				return nil // superseded: not the configured UI instead
+			}
 			if err != nil {
 				log.Printf("cmp: dynamicUi: %v", err)
 			} else if name != "" {
@@ -363,19 +366,35 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 				}
 			}
 		}
+		// The UI shown is changed only by the latest request: a newer one
+		// cancels ctx under e.mu before it shows anything, so a superseded
+		// request cannot record its UI after the newer one did (the UI the
+		// newer one shows would then never be hidden).
+		e.mu.Lock()
+		if ctx.Err() != nil {
+			e.mu.Unlock()
+			return nil
+		}
+		prev := e.shownUI
+		if len(items) == 0 {
+			e.shownUI = nil
+		} else {
+			e.shownUI = u
+		}
+		e.mu.Unlock()
 		if len(items) == 0 {
 			shownItems = 0
 			e.setLast(nil)
 			e.notifyItems(ctx, h, &c, 0, nil, nil)
 			hideUI(u)
-			e.hideShownUI(ctx, h, u)
+			if prev != nil && prev.Name() != u.Name() {
+				if err := prev.Hide(ctx, h); err != nil {
+					log.Printf("cmp: ui %s: hide: %v", prev.Name(), err)
+				}
+			}
 			return nil
 		}
 		shownItems = len(items)
-		e.mu.Lock()
-		prev := e.shownUI
-		e.shownUI = u
-		e.mu.Unlock()
 		if prev != nil && prev.Name() != u.Name() {
 			if err := prev.Hide(ctx, h); err != nil {
 				log.Printf("cmp: ui %s: hide: %v", prev.Name(), err)
@@ -802,6 +821,16 @@ func (e *engine) showLast(ctx context.Context, h sdk.Host, params []any) (any, e
 	ui, err := e.uiFor(l.cfg, l.al, name)
 	if err != nil {
 		return nil, err
+	}
+	// The UI that showed the list is hidden, as ddc.vim does.
+	e.mu.Lock()
+	prev := e.shownUI
+	e.shownUI = ui
+	e.mu.Unlock()
+	if prev != nil && prev.Name() != ui.Name() {
+		if err := prev.Hide(ctx, h); err != nil {
+			log.Printf("cmp: ui %s: hide: %v", prev.Name(), err)
+		}
 	}
 	if err := ui.Show(ctx, h, ShowRequest{Context: l.c, Col: l.col, Items: l.items, Final: true}); err != nil {
 		return nil, err
