@@ -49,6 +49,10 @@ type engine struct {
 	// shownUI is the UI that showed the last list. When DynamicUI picks
 	// another one, it is hidden first, as in ddc.vim.
 	shownUI UI
+
+	// gathering counts the completions gathering after their notification
+	// was handled (complete).
+	gathering sync.WaitGroup
 }
 
 type lastList struct {
@@ -295,7 +299,13 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	// Cancelled when this returns, unless the gathering goes on (below).
+	gathering := false
+	defer func() {
+		if !gathering {
+			cancel()
+		}
+	}()
 	e.mu.Lock()
 	if c.Seq < e.latest {
 		e.mu.Unlock()
@@ -328,6 +338,22 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		}
 	}
 
+	// The sources are waited for after the notification is handled:
+	// goda.vim handles the notifications of the editor one after the other,
+	// and a request after the ones before it, so those after this one would
+	// wait for the sources. A newer complete or hide cancels ctx (above).
+	gathering = true
+	e.gathering.Go(func() {
+		defer cancel()
+		if err := e.gather(ctx, h, &c, cfg, al, ui, raw); err != nil {
+			log.Printf("cmp: complete: %v", err)
+		}
+	})
+	return nil, nil
+}
+
+// gather gathers the candidates of the sources of a complete and shows them.
+func (e *engine) gather(ctx context.Context, h sdk.Host, c *Context, cfg Config, al Aliases, ui UI, raw map[string]any) error {
 	hideUI := func(u UI) {
 		if err := u.Hide(ctx, h); err != nil {
 			log.Printf("cmp: ui %s: hide: %v", u.Name(), err)
@@ -349,11 +375,11 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 	}
 
 	shownItems := 0
-	err = e.run(ctx, h, &c, cfg, al, func() { hideUI(ui) }, func(items []Item, start int, final bool, pending []string) error {
+	err := e.run(ctx, h, c, cfg, al, func() { hideUI(ui) }, func(items []Item, start int, final bool, pending []string) error {
 		u := ui
 		if len(items) > 0 && cfg.DynamicUI != nil {
 			name, err := sdk.Guard(ctx, func() (string, error) {
-				return cfg.DynamicUI(ctx, h, DynamicUIArgs{Context: &c, Items: items})
+				return cfg.DynamicUI(ctx, h, DynamicUIArgs{Context: c, Items: items})
 			})
 			if ctx.Err() != nil {
 				return nil // superseded: not the configured UI instead
@@ -385,7 +411,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		if len(items) == 0 {
 			shownItems = 0
 			e.setLast(nil)
-			e.notifyItems(ctx, h, &c, 0, nil, nil)
+			e.notifyItems(ctx, h, c, 0, nil, nil)
 			hideUI(u)
 			if prev != nil && prev.Name() != u.Name() {
 				if err := prev.Hide(ctx, h); err != nil {
@@ -400,10 +426,10 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 				log.Printf("cmp: ui %s: hide: %v", prev.Name(), err)
 			}
 		}
-		items = e.remember(&c, cfg.timeout(), u, items, srcs, previews)
-		e.setLast(&lastList{c: &c, col: start + 1, items: items, cfg: cfg, al: al})
-		e.notifyItems(ctx, h, &c, start+1, items, cfg.Sources)
-		if err := u.Show(ctx, h, ShowRequest{Context: &c, Col: start + 1, Items: items, Final: final, Pending: pending}); err != nil {
+		items = e.remember(c, cfg.timeout(), u, items, srcs, previews)
+		e.setLast(&lastList{c: c, col: start + 1, items: items, cfg: cfg, al: al})
+		e.notifyItems(ctx, h, c, start+1, items, cfg.Sources)
+		if err := u.Show(ctx, h, ShowRequest{Context: c, Col: start + 1, Items: items, Final: final, Pending: pending}); err != nil {
 			log.Printf("cmp: ui %s: %v", u.Name(), err)
 			return err
 		}
@@ -411,10 +437,10 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
 	if ctx.Err() != nil {
-		return nil, nil // superseded
+		return nil // superseded
 	}
 	e.mu.Lock()
 	if c.Manual && shownItems > 0 {
@@ -423,7 +449,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		e.manual = nil
 	}
 	e.mu.Unlock()
-	return shownItems, nil
+	return nil
 }
 
 // continueManual returns the manual completion that c continues, if any:
@@ -684,6 +710,12 @@ func (e *engine) ensureInit(ctx context.Context, h sdk.Host, key string, src Sou
 // first, then the added ones in the reverse order of their registration.
 // goda.vim's host calls it (sdk.Closer) when the plugin stops.
 func (e *engine) Close(ctx context.Context) error {
+	e.mu.Lock()
+	if e.cancel != nil {
+		e.cancel()
+	}
+	e.mu.Unlock()
+	e.gathering.Wait()
 	e.ev.close()
 	var errs []string
 	closeOne := func(what string, v any) {

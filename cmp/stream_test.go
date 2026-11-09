@@ -156,6 +156,7 @@ func TestStreamSupersededRequestStops(t *testing.T) {
 	time.Sleep(200 * time.Millisecond)
 	p.Handlers()["complete"](context.Background(), h, []any{ctxMap(2, "f", "")}) // takes seq 2 and ends at its timeout... cancel via hide
 	wg.Wait()
+	cmp.WaitGathering(p)
 	if !stopped.Load() {
 		t.Errorf("the superseded stream was not cancelled")
 	}
@@ -241,7 +242,9 @@ func TestInitDoneResolve(t *testing.T) {
 		})
 	}
 	wg.Wait()
+	cmp.WaitGathering(p)
 	p.Handlers()["complete"](context.Background(), h, []any{ctxMap(20, "p", "go")})
+	cmp.WaitGathering(p)
 	if n := src.inits.Load(); n != 1 {
 		t.Errorf("Init ran %d times, want 1", n)
 	}
@@ -377,6 +380,7 @@ func TestPreview(t *testing.T) {
 	}
 	h := uiHost()
 	p.Handlers()["complete"](context.Background(), h, []any{ctxMap(1, "a", "")})
+	cmp.WaitGathering(p)
 	if len(hosts) == 0 || hosts[0] != sdk.Host(h) {
 		t.Errorf("filters got hosts %v", hosts)
 	}
