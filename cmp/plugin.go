@@ -439,16 +439,18 @@ func (e *engine) gather(ctx context.Context, h sdk.Host, c *Context, cfg Config,
 	if err != nil {
 		return err
 	}
+	// Under e.mu, as the newer complete cancels ctx and reads e.manual
+	// (continueManual): a superseded one must not change it after that.
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	if ctx.Err() != nil {
 		return nil // superseded
 	}
-	e.mu.Lock()
 	if c.Manual && shownItems > 0 {
 		e.manual = &manualState{bufnr: c.Bufnr, mode: c.Mode, input: c.Input, sources: cfg.Sources, ui: cfg.UI}
 	} else if c.Event != "Update" {
 		e.manual = nil
 	}
-	e.mu.Unlock()
 	return nil
 }
 
