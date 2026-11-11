@@ -13,7 +13,7 @@ import (
 
 // The end-to-end tests of the core run with the test UI
 // (cmptest.NewUI("test")), whose state the editor records; the extensions
-// have their own (ext/e2e).
+// have their own (the module e2e).
 
 // TestRealPatch types into a real editor and checks what the UI is asked to
 // show, with the buffer patched at run time: switched off, put back, and an

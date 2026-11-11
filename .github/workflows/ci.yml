@@ -68,8 +68,23 @@ jobs:
       - run: gofmt -l . | tee /dev/stderr | (! read)
       - run: go vet ./...
       - run: go test -race ./...
+      # The end-to-end tests of the extensions: a module of their own (they
+      # need the UIs and goda-cmp-ext). It replaces the root one: when a
+      # dependency of the root is updated (dependabot updates each module
+      # alone), its go.mod is behind until it is tidied. Let go update it.
+      - run: go vet ./... && go test -race ./...
+        working-directory: goda-cmp.vim/e2e
         env:
           GODA_CMP_PUM: ${{ github.workspace }}/pum.vim
+          GOFLAGS: -mod=mod
+      - run: go vet ./...
+        working-directory: goda-cmp.vim/examples/config
+        env:
+          GOFLAGS: -mod=mod
+      - run: go vet ./...
+        working-directory: goda-cmp.vim/examples/ddc
+        env:
+          GOFLAGS: -mod=mod
 
   # Windows and macOS: vet and the tests that need no editor, shell or
   # language server (-short; those run on Linux above).
@@ -93,3 +108,7 @@ jobs:
       - run: go version
       - run: go vet ./...
       - run: go test -short ./...
+      - run: go vet ./... && go test -short ./...
+        working-directory: e2e
+        env:
+          GOFLAGS: -mod=mod

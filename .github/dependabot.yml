@@ -4,7 +4,11 @@
 version: 2
 updates:
   - package-ecosystem: gomod
-    directory: /
+    directories:
+      - /
+      - /e2e
+      - /examples/config
+      - /examples/ddc
     schedule:
       interval: weekly
     cooldown:

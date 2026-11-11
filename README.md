@@ -55,10 +55,10 @@ script, is in [examples/ddc](examples/ddc).
         │  imports
         ▼
  goda-cmp.vim/cmp                 engine and interfaces (no UI, no source)
- goda-cmp.vim/ext/...             bundled extensions: ui/native, ui/pum,
-                                  ports of ddc.vim extensions:
-                                  source/around, source/lsp, source/file, ...
-                                  (`:help goda-cmp-bundled`)
+ goda-cmp-ui-*.vim/ext/ui/...     the UIs: native, pum, inline
+ goda-cmp-ext/ext/...             ports of ddc.vim extensions:
+                                  source/around, source/lsp, source/file, ...,
+                                  ui/none (`:help goda-cmp-bundled`)
  other extensions                 Go packages from other repositories
         │
         ▼  go build  →  one binary, started by goda.vim (Vim or Neovim)
@@ -72,17 +72,19 @@ editor type-checks and completes the configuration.
 
 ```sh
 go test ./...                      # unit tests; also real Vim and Neovim if present
-GODA_CMP_PUM=/path/to/pum.vim go test ./ext/e2e   # also the pum.vim scenarios
+cd e2e && GODA_CMP_PUM=/path/to/pum.vim go test ./...   # the extensions together
 ```
 
 The end-to-end tests type into a real Vim and a real Neovim, whichever are
 installed, in a pseudo terminal (Python 3 needed), with a binary built from a
 configuration. Those of the core (`cmp`) use a test UI (`cmptest.NewUI`) and
 no extension's UI; those of the UIs, the extensions and the examples are in
-`ext/e2e` (and `ext/source/lsp`, with gopls if it is installed). The harness
-is the package `cmp/cmptest/e2e`, which extensions in other modules can use
-too. CI (`.github/workflows/ci.yml`) installs all of them. They build against
-goda.vim as a sibling directory (`../goda.vim`), and are skipped without it.
+`e2e`, a module of its own that requires them (the lsp source has its own in
+goda-cmp-ext, with gopls if it is installed). The harness is the package
+`cmp/cmptest/e2e`, which extensions in other modules use too. CI
+(`.github/workflows/ci.yml`) installs all of them. They build against
+goda.vim checked out next to goda-cmp.vim (`../goda.vim`, its latest version)
+when there is one, otherwise against the goda.vim of go.mod.
 
 ## License
 

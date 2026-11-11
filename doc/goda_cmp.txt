@@ -39,7 +39,9 @@ INSTALL                                                     *goda-cmp-install*
 Requirements: Go 1.26 or later; Vim 9.1 or later (|+job| |+channel|
 |+timers|) or Neovim 0.11 or later; goda.vim; pum.vim if you want the pum popup.
 
-1. Install goda.vim and goda-cmp.vim with your plugin manager.
+1. Install goda.vim, goda-cmp.vim and the UIs you use (goda-cmp-ui-native.vim,
+   goda-cmp-ui-pum.vim, goda-cmp-ui-inline.vim: |goda-cmp-bundled|) with your
+   plugin manager.
 
 2. Create your configuration, a Go module of your own: `main.go`, `config.go`,
    `go.mod`, `go.sum`.  Keep it with the rest of your editor configuration.
@@ -50,6 +52,8 @@ Requirements: Go 1.26 or later; Vim 9.1 or later (|+job| |+channel|
 	cp /path/to/goda-cmp.vim/examples/config/{main.go,config.go} .
 	go mod init goda-cmp-config
 	go get github.com/Shougo/goda-cmp.vim@latest
+	go get github.com/Shougo/goda-cmp-ui-native.vim@latest
+	go get github.com/Shougo/goda-cmp-ext@latest
 	go mod tidy
 <
 3. Add to your vimrc: >vim
@@ -469,8 +473,8 @@ POPUP                                                         *goda-cmp-popup*
 
 A UI is an extension, added like the others and chosen with `UI`: >go
 
-	import "github.com/Shougo/goda-cmp.vim/ext/ui/native"
-	import "github.com/Shougo/goda-cmp.vim/ext/ui/pum"
+	import "github.com/Shougo/goda-cmp-ui-native.vim/ext/ui/native"
+	import "github.com/Shougo/goda-cmp-ui-pum.vim/ext/ui/pum"
 
 	b.AddUI(native.New())   // "native": Vim's popup menu
 	b.AddUI(pum.New())      // "pum": pum.vim, which must be installed
@@ -482,7 +486,7 @@ its own documentation, its parameters (set with `uiParams`,
 	native		|goda-cmp-ui-native.txt|
 	pum		|goda-cmp-ui-pum.txt|
 	inline		|goda-cmp-ui-inline.txt|
-	none		|goda-cmp-ui-none.txt|
+	none		the README of goda-cmp-ext
 
 ==============================================================================
 EXTENSIONS                                                *goda-cmp-extension*
@@ -590,13 +594,18 @@ in the same one.
 ==============================================================================
 BUNDLED EXTENSIONS                                          *goda-cmp-bundled*
 
-These are in this repository, under `ext/`: ports of ddc.vim extensions,
-named as the originals without "_" ("matcher_head" is "matcherhead").  For
-version 1.0 they move out of it: each UI to a repository of its own (a UI
-with Vim script is installed as a Vim plugin), and the sources and filters
-together to one repository (Go packages only, imported by the
-configuration; one that grows large may get a repository of its own
-later).  The import paths change then.  Their parameters are the original's,
+Ports of ddc.vim extensions, named as the originals without "_"
+("matcher_head" is "matcherhead"), in repositories of their own: each UI
+with Vim script (installed as a Vim plugin), and the sources, the filters
+and the UI none together (Go packages only, imported by the configuration):
+
+	goda-cmp-ui-native.vim	https://github.com/Shougo/goda-cmp-ui-native.vim
+	goda-cmp-ui-pum.vim	https://github.com/Shougo/goda-cmp-ui-pum.vim
+	goda-cmp-ui-inline.vim	https://github.com/Shougo/goda-cmp-ui-inline.vim
+	goda-cmp-ext		https://github.com/Shougo/goda-cmp-ext
+				(ext/source/..., ext/filter/..., ext/ui/none)
+
+Their parameters are the original's,
 as fields of `Params` with the original's names in JSON (|goda-cmp-params|);
 the package documentation of each (`go doc`) has the details.
 
@@ -666,8 +675,8 @@ Completion on the command line works as in ddc.vim.  It is enabled for one
 command line at a time, typically from the mapping that opens it, and its end
 fires the |User| autocmd "GodaCmpCmdlineLeave": >go
 
-	import "github.com/Shougo/goda-cmp.vim/ext/source/cmdline"
-	import "github.com/Shougo/goda-cmp.vim/ext/ui/pum"
+	import "github.com/Shougo/goda-cmp-ext/ext/source/cmdline"
+	import "github.com/Shougo/goda-cmp-ui-pum.vim/ext/ui/pum"
 
 	b.AddUI(pum.New())
 	b.AddSource(cmdline.New())
@@ -732,8 +741,8 @@ completes files or directories, only entries that exist are offered.
 `ext/filter/sortercmdlinehistory` (ddc-filter-sorter_cmdline_history) puts
 first the candidates found in a recent entry: >go
 
-	import "github.com/Shougo/goda-cmp.vim/ext/filter/sortercmdlinehistory"
-	import "github.com/Shougo/goda-cmp.vim/ext/source/cmdlinehistory"
+	import "github.com/Shougo/goda-cmp-ext/ext/filter/sortercmdlinehistory"
+	import "github.com/Shougo/goda-cmp-ext/ext/source/cmdlinehistory"
 
 	b.AddSource(cmdlinehistory.New(cmdlinehistory.Params{}))
 	b.AddFilter(sortercmdlinehistory.New(sortercmdlinehistory.Params{}))
@@ -811,10 +820,10 @@ selected: see |goda-cmp-ui-native-limitations|.
 ==============================================================================
 LANGUAGE SERVERS                                                *goda-cmp-lsp*
 
-Package `ext/source/lsp` is a source backed by a language server, which it
-starts itself as a child process (one per project root) and talks to over
-stdio.  It works the same in Vim and Neovim, since it does not use either
-editor's LSP client.
+Package `ext/source/lsp` of goda-cmp-ext is a source backed by a language
+server, which it starts itself as a child process (one per project root) and
+talks to over stdio.  It works the same in Vim and Neovim, since it does not
+use either editor's LSP client.
 
 The source carries no settings of its own for any server: you write them in
 your config.go, like the parameters of any source.  Add the source once per
@@ -822,8 +831,8 @@ server, each under its own name: >go
 
 	import (
 	    "github.com/Shougo/goda-cmp.vim/cmp"
-	    "github.com/Shougo/goda-cmp.vim/ext/filter/sortertext"
-	    "github.com/Shougo/goda-cmp.vim/ext/source/lsp"
+	    "github.com/Shougo/goda-cmp-ext/ext/filter/sortertext"
+	    "github.com/Shougo/goda-cmp-ext/ext/source/lsp"
 	)
 
 	b.AddSource(lsp.New(lsp.Params{
