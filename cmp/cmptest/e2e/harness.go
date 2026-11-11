@@ -3,10 +3,13 @@ package e2e
 import (
 	"embed"
 	"encoding/json"
+	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -17,25 +20,40 @@ import (
 //go:embed files
 var files embed.FS
 
-// Roots returns the directories of goda-cmp.vim (the module, as the go
-// command finds it from the test's directory) and of goda.vim, which must be
-// next to it. The test is skipped without goda.vim.
+// Roots returns the directories of goda-cmp.vim and of goda.vim: those of
+// the modules the test's module requires (its own directory for
+// goda-cmp.vim's tests), or a goda.vim checked out next to goda-cmp.vim (its
+// latest version, as the CI of goda-cmp.vim has it).
 func Roots(t testing.TB) (repo, godaRoot string) {
 	t.Helper()
-	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", "github.com/Shougo/goda-cmp.vim").Output()
-	if err != nil {
-		t.Fatalf("go list: %v", err)
-	}
-	repo = strings.TrimSpace(string(out))
+	repo = ModuleDir(t, "github.com/Shougo/goda-cmp.vim")
 	godaRoot = filepath.Join(filepath.Dir(repo), "goda.vim")
 	if _, err := os.Stat(godaRoot); err != nil {
-		t.Skip("goda.vim is not next to goda-cmp.vim")
+		godaRoot = ModuleDir(t, "github.com/Shougo/goda.vim")
 	}
 	return repo, godaRoot
 }
 
+// ModuleDir returns the directory of the module path, as the go command finds
+// it from the test's directory: a UI's, to add to Options.RTP.
+func ModuleDir(t testing.TB, path string) string {
+	t.Helper()
+	out, err := exec.Command("go", "list", "-m", "-f", "{{.Dir}}", path).Output()
+	if err != nil {
+		t.Fatalf("go list -m %s: %v", path, err)
+	}
+	dir := strings.TrimSpace(string(out))
+	if dir == "" {
+		t.Fatalf("go list -m %s: no directory", path)
+	}
+	return dir
+}
+
 // BuildConfig builds a configuration (the files of srcDir, a main package)
-// against goda-cmp.vim and goda.vim of Roots, and returns the binary.
+// and returns the binary. Its module requires what the test's module
+// requires, and the test's module itself (its packages: a source of the
+// test's repository, say), with the same replacements; goda-cmp.vim and
+// goda.vim are those of Roots.
 func BuildConfig(t testing.TB, srcDir string) string {
 	t.Helper()
 	repo, godaRoot := Roots(t)
@@ -60,27 +78,93 @@ func BuildConfig(t testing.TB, srcDir string) string {
 			t.Fatal(err)
 		}
 	}
-	gomod := "module goda-cmp-config\n\ngo 1.26\n\n" +
-		"require (\n\tgithub.com/Shougo/goda-cmp.vim v0.0.0\n\tgithub.com/Shougo/goda.vim v0.0.0\n)\n\n" +
-		"replace github.com/Shougo/goda-cmp.vim => " + repo + "\n" +
-		"replace github.com/Shougo/goda.vim => " + godaRoot + "\n"
-	if err := os.WriteFile(filepath.Join(cfgDir, "go.mod"), []byte(gomod), 0o644); err != nil {
+	m := mainModule(t)
+	var b strings.Builder
+	b.WriteString("module goda-cmp-config\n\ngo 1.26\n\n")
+	fmt.Fprintf(&b, "require %s v0.0.0\n", m.Path)
+	for _, r := range m.Require {
+		if r.Path != m.Path {
+			fmt.Fprintf(&b, "require %s %s\n", r.Path, r.Version)
+		}
+	}
+	replaced := map[string]string{
+		"github.com/Shougo/goda-cmp.vim": repo,
+		"github.com/Shougo/goda.vim":     godaRoot,
+	}
+	replaced[m.Path] = m.Dir
+	if m.Path != "github.com/Shougo/goda-cmp.vim" {
+		fmt.Fprintf(&b, "require github.com/Shougo/goda-cmp.vim v0.0.0\n")
+	}
+	for _, r := range m.Replace {
+		if _, ok := replaced[r.Old.Path]; ok {
+			continue
+		}
+		to := r.New.Path
+		if r.New.Version != "" {
+			to += " " + r.New.Version
+		} else if !filepath.IsAbs(to) {
+			to = filepath.Join(m.Dir, to)
+		}
+		fmt.Fprintf(&b, "replace %s => %s\n", r.Old.Path, to)
+	}
+	for _, p := range slices.Sorted(maps.Keys(replaced)) {
+		fmt.Fprintf(&b, "replace %s => %s\n", p, filepath.ToSlash(replaced[p]))
+	}
+	if err := os.WriteFile(filepath.Join(cfgDir, "go.mod"), []byte(b.String()), 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// The sums of the test's module: "go mod tidy" needs no others when
+	// the configuration imports what it does.
+	if sum, err := os.ReadFile(filepath.Join(m.Dir, "go.sum")); err == nil {
+		if err := os.WriteFile(filepath.Join(cfgDir, "go.sum"), sum, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
 	bin := filepath.Join(dir, "goda-cmp")
-	// The go.mod requires both modules at v0.0.0, while goda-cmp.vim's own
-	// go.mod asks for a newer goda.vim; "go mod tidy" settles the
-	// requirements (offline: both are replaced by local directories) so
-	// that go build does not refuse.
+	// "go mod tidy" settles the requirements (the replaced modules are
+	// required at v0.0.0) so that go build does not refuse.
 	for _, args := range [][]string{{"mod", "tidy"}, {"build", "-o", bin, "."}} {
 		cmd := exec.Command("go", args...)
 		cmd.Dir = cfgDir
-		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+		cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOWORK=off")
 		if b, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("go %s in %s: %v\n%s", strings.Join(args, " "), cfgDir, err, b)
 		}
 	}
 	return bin
+}
+
+// module is the main module of the test: go list -m -json, and the
+// requirements and replacements of its go.mod.
+type module struct {
+	Path, Dir string
+	Require   []struct{ Path, Version string }
+	Replace   []struct {
+		Old struct{ Path string }
+		New struct{ Path, Version string }
+	}
+}
+
+func mainModule(t testing.TB) module {
+	t.Helper()
+	var m module
+	out, err := exec.Command("go", "list", "-m", "-json").Output()
+	if err != nil {
+		t.Fatalf("go list -m: %v", err)
+	}
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("go", "mod", "edit", "-json")
+	cmd.Dir = m.Dir
+	out, err = cmd.Output()
+	if err != nil {
+		t.Fatalf("go mod edit -json: %v", err)
+	}
+	if err := json.Unmarshal(out, &m); err != nil {
+		t.Fatal(err)
+	}
+	return m
 }
 
 // Dump is a record the editor wrote: DumpPopup() (Ctrl-] in insert mode, on
