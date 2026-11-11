@@ -4,11 +4,11 @@
 package main
 
 import (
-	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/sortercmdlinehistory"
 	"github.com/Shougo/goda-cmp-ext/ext/source/cmdline"
 	"github.com/Shougo/goda-cmp-ext/ext/source/cmdlinehistory"
 	"github.com/Shougo/goda-cmp-ui-pum.vim/ext/ui/pum"
+	"github.com/Shougo/goda-cmp.vim/cmp"
 )
 
 func main() {

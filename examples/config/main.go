@@ -7,13 +7,13 @@
 package main
 
 import (
-	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/convertertruncateabbr"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/sorterlength"
 	"github.com/Shougo/goda-cmp-ext/ext/source/around"
 	"github.com/Shougo/goda-cmp-ui-native.vim/ext/ui/native"
 	"github.com/Shougo/goda-cmp-ui-pum.vim/ext/ui/pum"
+	"github.com/Shougo/goda-cmp.vim/cmp"
 )
 
 func main() {

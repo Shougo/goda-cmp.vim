@@ -9,9 +9,9 @@ import (
 	"os"
 	"time"
 
-	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp-ui-native.vim/ext/ui/native"
+	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda.vim/sdk"
 )
 

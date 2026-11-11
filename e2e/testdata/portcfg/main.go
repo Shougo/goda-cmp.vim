@@ -5,7 +5,6 @@ package main
 import (
 	"context"
 
-	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/converterremoveoverlap"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/matcherhead"
 	"github.com/Shougo/goda-cmp-ext/ext/filter/matcherlength"
@@ -21,6 +20,7 @@ import (
 	"github.com/Shougo/goda-cmp-ext/ext/source/vim"
 	"github.com/Shougo/goda-cmp-ui-inline.vim/ext/ui/inline"
 	"github.com/Shougo/goda-cmp-ui-pum.vim/ext/ui/pum"
+	"github.com/Shougo/goda-cmp.vim/cmp"
 	"github.com/Shougo/goda.vim/sdk"
 )
 
