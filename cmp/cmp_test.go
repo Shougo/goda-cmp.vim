@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -440,6 +441,7 @@ func TestUpdateInfo(t *testing.T) {
 	if _, err := p.Handlers()["select"](ctx, h, []any{"1:0"}); err != nil {
 		t.Fatal(err)
 	}
+	cmp.WaitSelecting(p)
 	if got["ref"] != "1:0" || got["info"] != "resolved xyz" {
 		t.Errorf("update_info got %v", got)
 	}
@@ -449,6 +451,112 @@ func TestUpdateInfo(t *testing.T) {
 			t.Errorf("the engine called a receiver: %s", c.Fn)
 		}
 	}
+}
+
+// select does not wait for the source to resolve the item: the notifications
+// and requests after it would wait too. A newer select cancels the resolving
+// of the item before, whose info is not shown.
+func TestSelectDoesNotWait(t *testing.T) {
+	src := &blockingResolver{fakeSource: fakeSource{name: "a", items: []string{"xa", "xb"}}, release: make(chan struct{})}
+	b := newBuilder()
+	b.AddSource(src)
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}})
+	p, err := b.Plugin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := uiHost()
+	var mu sync.Mutex
+	var got []string
+	h.Funcs["goda_cmp_testui#insert#update_info"] = func(a ...any) (any, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, a[0].(map[string]any)["ref"].(string))
+		return nil, nil
+	}
+	ctx := context.Background()
+	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
+		t.Fatal(err)
+	}
+	cmp.WaitGathering(p)
+	start := time.Now()
+	for _, ref := range []string{"1:0", "1:1"} {
+		if _, err := p.Handlers()["select"](ctx, h, []any{ref}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if d := time.Since(start); d > 500*time.Millisecond {
+		t.Errorf("select waited %v for the source", d)
+	}
+	close(src.release)
+	cmp.WaitSelecting(p)
+	mu.Lock()
+	defer mu.Unlock()
+	if !slices.Equal(got, []string{"1:1"}) {
+		t.Errorf("update_info got %v, want only the item selected last", got)
+	}
+	// A reference no longer known is still told to the caller.
+	if _, err := p.Handlers()["select"](ctx, h, []any{"9:0"}); err == nil {
+		t.Error("select of an unknown reference: no error")
+	}
+}
+
+// A complete cancels the resolving of the item selected: it is of the list
+// before.
+func TestCompleteCancelsSelect(t *testing.T) {
+	src := &blockingResolver{fakeSource: fakeSource{name: "a", items: []string{"xa", "xb"}}, release: make(chan struct{})}
+	b := newBuilder()
+	b.AddSource(src)
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}})
+	p, err := b.Plugin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := uiHost()
+	var mu sync.Mutex
+	var got []string
+	h.Funcs["goda_cmp_testui#insert#update_info"] = func(a ...any) (any, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		got = append(got, a[0].(map[string]any)["ref"].(string))
+		return nil, nil
+	}
+	ctx := context.Background()
+	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
+		t.Fatal(err)
+	}
+	cmp.WaitGathering(p)
+	if _, err := p.Handlers()["select"](ctx, h, []any{"1:0"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(2, "xa", "")}); err != nil {
+		t.Fatal(err)
+	}
+	cmp.WaitGathering(p)
+	close(src.release)
+	cmp.WaitSelecting(p)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(got) != 0 {
+		t.Errorf("update_info after a complete got %v", got)
+	}
+}
+
+// blockingResolver resolves an item once release is closed.
+type blockingResolver struct {
+	fakeSource
+	release chan struct{}
+}
+
+func (s *blockingResolver) Resolve(ctx context.Context, _ sdk.Host, a cmp.DoneArgs) (cmp.Item, error) {
+	select {
+	case <-s.release:
+	case <-ctx.Done():
+		return a.Item, ctx.Err()
+	}
+	it := a.Item
+	it.Info = "resolved " + it.Word
+	return it, nil
 }
 
 type resolvingSource struct{ fakeSource }
