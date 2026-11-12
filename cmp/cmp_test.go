@@ -3,6 +3,7 @@ package cmp_test
 import (
 	"context"
 	"errors"
+	"log"
 	"reflect"
 	"slices"
 	"strings"
@@ -790,4 +791,75 @@ func TestCmdlineTypeWithoutSources(t *testing.T) {
 	if len(h.Calls()) != 0 {
 		t.Errorf("calls: %v", h.Calls())
 	}
+}
+
+// logged collects what package log writes while f runs.
+func logged(t *testing.T, f func()) string {
+	t.Helper()
+	var mu sync.Mutex
+	var b strings.Builder
+	w := writerFunc(func(p []byte) (int, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		return b.Write(p)
+	})
+	out, flags := log.Writer(), log.Flags()
+	log.SetOutput(w)
+	log.SetFlags(0)
+	defer func() { log.SetOutput(out); log.SetFlags(flags) }()
+	f()
+	mu.Lock()
+	defer mu.Unlock()
+	return b.String()
+}
+
+type writerFunc func([]byte) (int, error)
+
+func (f writerFunc) Write(p []byte) (int, error) { return f(p) }
+
+// The resolving a newer select cancelled is not an error worth a log line;
+// a source that fails is.
+func TestSelectCancelledNotLogged(t *testing.T) {
+	src := &blockingResolver{fakeSource: fakeSource{name: "a", items: []string{"xa", "xb"}}, release: make(chan struct{})}
+	failing := failingResolver{fakeSource{name: "b", items: []string{"xc"}}}
+	b := newBuilder()
+	b.AddSource(src)
+	b.AddSource(failing)
+	b.PatchGlobal(cmp.Config{Sources: []string{"a", "b"}})
+	p, err := b.Plugin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := uiHost()
+	h.Funcs["goda_cmp_testui#insert#update_info"] = func(...any) (any, error) { return nil, nil }
+	ctx := context.Background()
+	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
+		t.Fatal(err)
+	}
+	cmp.WaitGathering(p)
+	out := logged(t, func() {
+		for _, ref := range []string{"1:0", "1:1", "1:2"} {
+			if _, err := p.Handlers()["select"](ctx, h, []any{ref}); err != nil {
+				t.Fatal(err)
+			}
+			if ref == "1:2" {
+				cmp.WaitSelecting(p)
+			}
+		}
+		close(src.release)
+		cmp.WaitSelecting(p)
+	})
+	if strings.Contains(out, "canceled") {
+		t.Errorf("cancelled resolving logged:\n%s", out)
+	}
+	if !strings.Contains(out, "cmp: source b: resolve: boom") {
+		t.Errorf("the failing source not logged:\n%s", out)
+	}
+}
+
+// failingResolver fails to resolve.
+type failingResolver struct{ fakeSource }
+
+func (failingResolver) Resolve(context.Context, sdk.Host, cmp.DoneArgs) (cmp.Item, error) {
+	return cmp.Item{}, errors.New("boom")
 }

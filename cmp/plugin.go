@@ -2,6 +2,7 @@ package cmp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"regexp"
@@ -614,7 +615,11 @@ func (e *engine) resolveFound(ctx context.Context, h sdk.Host, it Item, sh *show
 		return r.Resolve(ctx, h, DoneArgs{Context: sh.c, Item: it})
 	})
 	if err != nil {
-		log.Printf("cmp: source %s: resolve: %v", it.Source, err)
+		// (Not when cancelled: a newer select cancels the one before, as
+		// the user moves through the popup.)
+		if !cancelled(ctx) {
+			log.Printf("cmp: source %s: resolve: %v", it.Source, err)
+		}
 		return nil, err
 	}
 	out.Ref = it.Ref
@@ -673,11 +678,17 @@ func (e *engine) selectItem(ctx context.Context, h sdk.Host, params []any) (any,
 		ctx, cancel := context.WithTimeout(ctx, sh.timeout)
 		defer cancel()
 		_, err = sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, u.UpdateInfo(ctx, h, *out) })
-		if err != nil {
+		if err != nil && !cancelled(ctx) {
 			log.Printf("cmp: ui %s: updateInfo: %v", sh.ui.Name(), err)
 		}
 	})
 	return nil, nil
+}
+
+// cancelled: ctx was cancelled (not timed out), so whatever failed was not
+// wanted any more.
+func cancelled(ctx context.Context) bool {
+	return errors.Is(ctx.Err(), context.Canceled)
 }
 
 // cancelSelect cancels the resolving of the item selected last. Under e.mu.
