@@ -53,6 +53,12 @@ type engine struct {
 	// gathering counts the completions gathering after their notification
 	// was handled (complete).
 	gathering sync.WaitGroup
+
+	// selectCancel cancels the resolving of the item selected last
+	// (selectItem), under mu. selecting counts the items resolving after
+	// their notification was handled.
+	selectCancel context.CancelFunc
+	selecting    sync.WaitGroup
 }
 
 type lastList struct {
@@ -316,6 +322,8 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		e.cancel()
 	}
 	e.cancel = cancel
+	// The item selected is of the list before.
+	e.cancelSelect()
 	e.mu.Unlock()
 
 	// Nothing to complete (a command-line type without sources, input()
@@ -589,9 +597,16 @@ func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*It
 	if err != nil {
 		return nil, nil, err
 	}
+	out, err := e.resolveFound(ctx, h, it, sh)
+	return out, sh, err
+}
+
+// resolveFound asks the source of it to resolve it (nil when it is not a
+// Resolver), and keeps the result for a later done.
+func (e *engine) resolveFound(ctx context.Context, h sdk.Host, it Item, sh *shown) (*Item, error) {
 	r, ok := sh.sourceOf(it).(Resolver)
 	if !ok {
-		return nil, nil, nil
+		return nil, nil
 	}
 	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
 	defer cancel()
@@ -600,7 +615,7 @@ func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*It
 	})
 	if err != nil {
 		log.Printf("cmp: source %s: resolve: %v", it.Source, err)
-		return nil, nil, err
+		return nil, err
 	}
 	out.Ref = it.Ref
 	out.Source = it.Source
@@ -612,7 +627,7 @@ func (e *engine) resolveItem(ctx context.Context, h sdk.Host, params []any) (*It
 		}
 	}
 	e.mu.Unlock()
-	return &out, sh, nil
+	return &out, nil
 }
 
 func (e *engine) resolve(ctx context.Context, h sdk.Host, params []any) (any, error) {
@@ -625,22 +640,52 @@ func (e *engine) resolve(ctx context.Context, h sdk.Host, params []any) (any, er
 
 // selectItem resolves the item the user moved to and hands it to the UI
 // that showed it (InfoUpdater), which knows how to show it.
+//
+// The item is resolved after the notification is handled, as complete
+// gathers the sources: goda.vim handles the notifications of the editor one
+// after the other, and a request after the ones before it, so those after
+// this one would wait for the source (one resolve after another, as the user
+// moves through the popup). Only the item the user is on matters: a newer
+// select, a complete or a hide cancels the resolving of the one before. (The
+// complete of inserting the selected item is skipped before it cancels.)
 func (e *engine) selectItem(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	it, sh, err := e.resolveItem(ctx, h, params)
-	if err != nil || it == nil {
+	it, sh, err := e.lookup(params)
+	if err != nil {
 		return nil, err
 	}
-	u, ok := sh.ui.(InfoUpdater)
-	if !ok {
-		return nil, nil
+	ctx, cancel := context.WithCancel(ctx)
+	e.mu.Lock()
+	if e.selectCancel != nil {
+		e.selectCancel()
 	}
-	ctx, cancel := context.WithTimeout(ctx, sh.timeout)
-	defer cancel()
-	_, err = sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, u.UpdateInfo(ctx, h, *it) })
-	if err != nil {
-		log.Printf("cmp: ui %s: updateInfo: %v", sh.ui.Name(), err)
+	e.selectCancel = cancel
+	e.mu.Unlock()
+	e.selecting.Go(func() {
+		defer cancel()
+		out, err := e.resolveFound(ctx, h, it, sh)
+		if err != nil || out == nil || ctx.Err() != nil {
+			return
+		}
+		u, ok := sh.ui.(InfoUpdater)
+		if !ok {
+			return
+		}
+		ctx, cancel := context.WithTimeout(ctx, sh.timeout)
+		defer cancel()
+		_, err = sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, u.UpdateInfo(ctx, h, *out) })
+		if err != nil {
+			log.Printf("cmp: ui %s: updateInfo: %v", sh.ui.Name(), err)
+		}
+	})
+	return nil, nil
+}
+
+// cancelSelect cancels the resolving of the item selected last. Under e.mu.
+func (e *engine) cancelSelect() {
+	if e.selectCancel != nil {
+		e.selectCancel()
+		e.selectCancel = nil
 	}
-	return nil, err
 }
 
 func (e *engine) preview(ctx context.Context, h sdk.Host, params []any) (any, error) {
@@ -716,8 +761,10 @@ func (e *engine) Close(ctx context.Context) error {
 	if e.cancel != nil {
 		e.cancel()
 	}
+	e.cancelSelect()
 	e.mu.Unlock()
 	e.gathering.Wait()
+	e.selecting.Wait()
 	e.ev.close()
 	var errs []string
 	closeOne := func(what string, v any) {
@@ -766,6 +813,7 @@ func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error
 		e.cancel()
 		e.cancel = nil
 	}
+	e.cancelSelect()
 	e.mu.Unlock()
 	e.setVisible(false)
 	e.setLast(nil)

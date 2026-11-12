@@ -9,3 +9,11 @@ func WaitGathering(p sdk.Plugin) {
 		e.gathering.Wait()
 	}
 }
+
+// WaitSelecting waits for the items of p that resolve after their select
+// was handled.
+func WaitSelecting(p sdk.Plugin) {
+	if e, ok := p.(*engine); ok {
+		e.selecting.Wait()
+	}
+}
