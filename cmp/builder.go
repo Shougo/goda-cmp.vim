@@ -102,7 +102,7 @@ func (b *Builder) PatchFiletypes(filetypes []string, c Config) *Builder {
 // Go settings and the Vim-side settings of each scope, from the widest scope
 // (global) to the narrowest (buffer). A dotted filetype such as "cpp.doxygen"
 // applies the patches of each part in order.
-func (b *Builder) resolve(filetype string, rt Patches) Config {
+func (b *Builder) resolve(filetype string, rt patches) Config {
 	cfg := merge(b.global, rt.Global)
 	for part := range strings.SplitSeq(filetype, ".") {
 		if p, ok := b.ft[part]; ok {
@@ -119,7 +119,7 @@ func (b *Builder) resolve(filetype string, rt Patches) Config {
 // added (nor aliased), parameters the extension does not take, patterns that
 // do not compile and values out of range. filetype is set for the
 // configuration of a filetype.
-func (b *Builder) checkConfig(where string, cfg Config, al Aliases, filetype bool) []string {
+func (b *Builder) checkConfig(where string, cfg Config, al aliases, filetype bool) []string {
 	var errs []string
 	add := func(format string, args ...any) {
 		errs = append(errs, where+": "+fmt.Sprintf(format, args...))
@@ -267,7 +267,7 @@ func hasCmdlineSources(cfg Config) bool {
 func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
 	errs = append(errs, b.checkEvents()...)
-	errs = append(errs, b.checkConfig("global", b.global, Aliases{}, false)...)
+	errs = append(errs, b.checkConfig("global", b.global, aliases{}, false)...)
 	if b.global.UI == "" {
 		errs = append(errs, `global: no ui is set: add one (b.AddUI(native.New()), see ext/ui) and set Config.UI to its name`)
 	}
@@ -276,7 +276,7 @@ func (b *Builder) Validate() error {
 		errs = append(errs, b.checkCmdlineUI("filetype "+ft, merge(b.global, c))...)
 	}
 	for ft, c := range b.ft {
-		errs = append(errs, b.checkConfig("filetype "+ft, c, Aliases{}, true)...)
+		errs = append(errs, b.checkConfig("filetype "+ft, c, aliases{}, true)...)
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("goda-cmp configuration:\n  %s", joinErrs(errs))

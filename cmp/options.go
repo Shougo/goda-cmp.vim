@@ -426,30 +426,30 @@ func decodeConfig(v any) (Config, error) {
 	return c, nil
 }
 
-// Patches are the settings made at run time from Vim script, which the editor
+// patches are the settings made at run time from Vim script, which the editor
 // sends with every request: {global, filetype: {ft: patch}, buffer}.
-type Patches struct {
+type patches struct {
 	Global   Config
 	Filetype map[string]Config
 	Buffer   Config
-	// Aliases are the names made with goda_cmp#alias().
-	Aliases Aliases
+	// aliases are the names made with goda_cmp#alias().
+	aliases aliases
 	// Manual is laid over everything else: the options of
 	// goda_cmp#complete({options}).
 	Manual Config
 }
 
-// Aliases are names given to extensions from Vim script, as ddc#custom#alias()
+// aliases are names given to extensions from Vim script, as ddc#custom#alias()
 // does: an alias is the extension it names, with parameters of its own
 // (sourceParams and so on, under the alias).
-type Aliases struct {
+type aliases struct {
 	Source map[string]string `json:"source"`
 	Filter map[string]string `json:"filter"`
 	UI     map[string]string `json:"ui"`
 }
 
-func decodePatches(v any) (Patches, error) {
-	var p Patches
+func decodePatches(v any) (patches, error) {
+	var p patches
 	if v == nil {
 		return p, nil
 	}
@@ -465,7 +465,7 @@ func decodePatches(v any) (Patches, error) {
 		case "buffer":
 			p.Buffer, err = decodeConfig(val)
 		case "aliases":
-			p.Aliases, err = decodeAliases(val)
+			p.aliases, err = decodeAliases(val)
 		case "manual":
 			p.Manual, err = decodeConfig(val)
 		case "filetype":
@@ -491,8 +491,8 @@ func decodePatches(v any) (Patches, error) {
 
 func joinErrs(errs []string) string { return strings.Join(errs, "\n  ") }
 
-func decodeAliases(v any) (Aliases, error) {
-	var a Aliases
+func decodeAliases(v any) (aliases, error) {
+	var a aliases
 	if v == nil {
 		return a, nil
 	}
@@ -503,7 +503,7 @@ func decodeAliases(v any) (Aliases, error) {
 	dec := json.NewDecoder(bytes.NewReader(b))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(&a); err != nil {
-		return Aliases{}, fmt.Errorf("aliases: %w", err)
+		return aliases{}, fmt.Errorf("aliases: %w", err)
 	}
 	return a, nil
 }

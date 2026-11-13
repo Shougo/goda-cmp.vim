@@ -32,7 +32,7 @@ type runner struct {
 	h       sdk.Host
 	c       *Context
 	cfg     Config
-	al      Aliases
+	al      aliases
 	timeout time.Duration
 
 	// The sources of the request, resolved (aliases, params), and the key
@@ -55,7 +55,7 @@ type runner struct {
 // StreamSource among the enabled sources show is called once, when every
 // source has answered, exactly like a plain gather. With one, it is called
 // whenever something new is there, at most every PartialInterval.
-func (e *engine) run(ctx context.Context, h sdk.Host, c *Context, cfg Config, al Aliases, hide func(), show showFunc) error {
+func (e *engine) run(ctx context.Context, h sdk.Host, c *Context, cfg Config, al aliases, hide func(), show showFunc) error {
 	r := &runner{
 		e: e, h: h, c: c, cfg: cfg, al: al, timeout: cfg.timeout(),
 		srcs:  map[string]Source{},

@@ -75,7 +75,7 @@ type lastList struct {
 	col   int
 	items []Item
 	cfg   Config
-	al    Aliases
+	al    aliases
 }
 
 type manualState struct {
@@ -126,16 +126,16 @@ func newEngine(b *Builder) *engine {
 // source, filter and uiFor find an extension by the name a configuration
 // uses: an added one or an alias, with the parameters the configuration
 // gives that name.
-func (e *engine) source(cfg Config, al Aliases, name string) (Source, string, error) {
+func (e *engine) source(cfg Config, al aliases, name string) (Source, string, error) {
 	return lookup(&e.inst, "source", e.b.sources, al.Source, name, cfg.SourceParams[name])
 }
 
-func (e *engine) filter(cfg Config, al Aliases, name string) (Filter, error) {
+func (e *engine) filter(cfg Config, al aliases, name string) (Filter, error) {
 	f, _, err := lookup(&e.inst, "filter", e.b.filters, al.Filter, name, cfg.FilterParams[name])
 	return f, err
 }
 
-func (e *engine) uiFor(cfg Config, al Aliases, name string) (UI, error) {
+func (e *engine) uiFor(cfg Config, al aliases, name string) (UI, error) {
 	u, _, err := lookup(&e.inst, "ui", e.b.uis, al.UI, name, cfg.UIParams[name])
 	return u, err
 }
@@ -250,7 +250,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 			return nil, nil // nothing to update: no completion either
 		}
 	}
-	al := rt.Aliases
+	al := rt.aliases
 	cfg := e.b.resolve(c.Filetype, rt)
 	if cfg.DynamicConfig != nil {
 		patch, err := sdk.Guard(ctx, func() (Config, error) {
@@ -370,7 +370,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 }
 
 // gather gathers the candidates of the sources of a complete and shows them.
-func (e *engine) gather(ctx context.Context, h sdk.Host, c *Context, cfg Config, al Aliases, ui UI, raw map[string]any) error {
+func (e *engine) gather(ctx context.Context, h sdk.Host, c *Context, cfg Config, al aliases, ui UI, raw map[string]any) error {
 	hideUI := func(u UI) {
 		if err := u.Hide(ctx, h); err != nil {
 			log.Printf("cmp: ui %s: hide: %v", u.Name(), err)
@@ -813,17 +813,17 @@ func (e *engine) Close(ctx context.Context) error {
 
 // scope reads the (filetype, patches) arguments that several handlers take,
 // and resolves the configuration.
-func (e *engine) scope(params []any) (Config, Aliases, error) {
+func (e *engine) scope(params []any) (Config, aliases, error) {
 	var ft string
 	var patches any
 	if err := sdk.DecodeArgs(params, sdk.Optional(&ft), sdk.Optional(&patches)); err != nil {
-		return Config{}, Aliases{}, err
+		return Config{}, aliases{}, err
 	}
 	rt, err := decodePatches(patches)
 	if err != nil {
-		return Config{}, Aliases{}, err
+		return Config{}, aliases{}, err
 	}
-	return e.b.resolve(ft, rt), rt.Aliases, nil
+	return e.b.resolve(ft, rt), rt.aliases, nil
 }
 
 func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error) {

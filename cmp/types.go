@@ -112,7 +112,7 @@ type Item struct {
 	// Source is the name of the source that produced the item.
 	Source string `json:"-"`
 
-	// ref identifies the item in the list a UI showed; the engine sets it
+	// Ref identifies the item in the list a UI showed; the engine sets it
 	// (as Vim's user_data) just before the UI sees the items.
 	Ref string `json:"user_data,omitempty"`
 }

@@ -244,7 +244,7 @@ func (ev *events) dispatch(it eventItem) {
 func (ev *events) serve(name string, q chan eventItem) {
 	h := ev.e.b.sources[name].(EventHandler)
 	for it := range q {
-		timeout := ev.e.b.resolve(it.ev.Filetype, Patches{}).timeout()
+		timeout := ev.e.b.resolve(it.ev.Filetype, patches{}).timeout()
 		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		_, err := sdk.Guard(ctx, func() (struct{}, error) { return struct{}{}, h.OnEvent(ctx, it.h, it.ev) })
 		cancel()

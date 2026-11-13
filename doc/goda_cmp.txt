@@ -13,6 +13,7 @@ Run-time patches	|goda-cmp-patch|
 Selecting candidates	|goda-cmp-select|
 Popup			|goda-cmp-popup|
 Extensions		|goda-cmp-extension|
+Compatibility		|goda-cmp-compatibility|
 Bundled extensions	|goda-cmp-bundled|
 Command line		|goda-cmp-cmdline|
 Terminal		|goda-cmp-terminal|
@@ -596,6 +597,31 @@ the list it is put in.  Packages are what a configuration imports: a
 repository may hold one extension or many, and sources and filters that
 depend on each other (a sorter that reads what its source reads) are kept
 in the same one.
+
+==============================================================================
+COMPATIBILITY                                         *goda-cmp-compatibility*
+
+The API of extensions and configurations is what packages `cmp` and
+`cmp/cmptest` export: the interfaces and the types they take and give
+(Source, Filter, UI and the optional ones, Context, Item, Gathered,
+ShowRequest, Preview, ...), and Builder, Config and SourceOption.  A new
+optional interface, field or function is added in a minor version.  A change
+that breaks code written against it (a name removed or renamed, a signature
+or a meaning changed) is made only in a minor version too, before 1.0.0, and
+is said in the release; a patch version never makes one.  After 1.0.0, it
+waits for 2.0.0.
+
+Not part of it:
+- Package `cmp/cmptest/e2e`, the harness of the end-to-end tests: it follows
+  goda-cmp.vim's own tests and may change in a minor version.
+- The plugin's methods beyond sdk.Plugin (cmptest.Wait() is the API for
+  them), and what is not exported.
+- The requests between the Vim script and the binary.  ScriptVersion says
+  when they change: goda.vim refuses a binary of another version and asks
+  to build it again.
+- What Item.Ref holds: the engine sets it before a UI sees the items, and a
+  UI keeps it to name an item (to hand it back, or as a key), not reading
+  anything in it.
 
 ==============================================================================
 BUNDLED EXTENSIONS                                          *goda-cmp-bundled*
