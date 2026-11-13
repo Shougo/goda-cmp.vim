@@ -93,6 +93,9 @@ goda_cmp#build()
 		thrown (with that of `go mod tidy`, when it failed too: it
 		needs the network for modules not in the cache yet) and the
 		previous binary keeps running.
+		NOTE: The binary is built by itself when completion starts and
+		there is none, or it is of another version than the Vim script
+		(see "build" of |goda#register()|): not |g:goda_cmp#binary|.
 
                                                            *goda_cmp#enable()*
 goda_cmp#enable()

@@ -51,6 +51,22 @@ function! s:default_bin() abort
   return s:cache_dir() . '/goda-cmp' . (has('win32') ? '.exe' : '')
 endfunction
 
+" The options of goda#register(): the version of the Vim script, and how to
+" build the binary when there is none or it is of another version (goda.vim
+" builds it then). Not for the binary of g:goda_cmp#binary: the user builds it.
+function! s:register_opts() abort
+  if exists('g:goda_cmp#binary')
+    return s:version
+  endif
+  return extend(#{build: function('s:build_binary'), bin: s:default_bin()}, s:version)
+endfunction
+
+" The build of the binary for goda.vim, as it starts it (nothing else: it
+" is not running).
+function! s:build_binary() abort
+  call goda#build(#{name: 'cmp', dir: s:config_dir(), bin: s:default_bin()})
+endfunction
+
 function! s:config_dir() abort
   if exists('g:goda_cmp#config_dir')
     return expand(g:goda_cmp#config_dir)
@@ -99,7 +115,7 @@ function! goda_cmp#enable() abort
     return
   endif
   " (Again after a build: a start that failed is tried again.)
-  call goda#register('cmp', function('s:start'), s:version)
+  call goda#register('cmp', function('s:start'), s:register_opts())
   silent! unlet s:boot_failed
   let s:enabled = 1
   let s:registered = {}
