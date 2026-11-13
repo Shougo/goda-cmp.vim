@@ -19,7 +19,7 @@ func completeErr(t *testing.T, b *cmp.Builder, h sdk.Host, c map[string]any) err
 		t.Fatal(err)
 	}
 	_, err = p.Handlers()["complete"](context.Background(), h, []any{c})
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 	return err
 }
 

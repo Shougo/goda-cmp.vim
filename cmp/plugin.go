@@ -62,6 +62,14 @@ type engine struct {
 	selecting    sync.WaitGroup
 }
 
+// Wait waits for what the engine does after a request returned: the
+// completions gathering after "complete", and the items resolving after
+// "select". For tests (cmptest.Wait): not part of sdk.Plugin.
+func (e *engine) Wait() {
+	e.gathering.Wait()
+	e.selecting.Wait()
+}
+
 type lastList struct {
 	c     *Context
 	col   int

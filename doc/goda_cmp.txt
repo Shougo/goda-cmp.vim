@@ -578,7 +578,10 @@ expressions made of those calls, lists, strings and numbers.
 behave like Vim's, for sources that read or change buffers.
 `cmptest.NewUI()` is a UI that calls Vim functions named after it
 ("goda_cmp_testui#{name}#show", ...), for tests that need a UI but not a
-particular one.  Package `cmp/cmptest/e2e` runs end-to-end tests in a real
+particular one.  A test that calls the handlers of the plugin
+(`Builder.Plugin()`) waits with `cmptest.Wait()` for what goes on after
+them: "complete" gathers and shows the items after it returns, "select"
+resolves the item.  Package `cmp/cmptest/e2e` runs end-to-end tests in a real
 Vim or Neovim: it builds a configuration (`BuildConfig`), types keys into the
 editor in a pseudo terminal (`Drive`, Python 3 needed) and returns what the
 editor recorded.  `cmptest.NewWords()` (a source of the words of the

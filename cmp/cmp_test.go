@@ -80,7 +80,7 @@ func complete(t *testing.T, b *cmp.Builder, h sdk.Host, c map[string]any) {
 	if _, err := p.Handlers()["complete"](context.Background(), h, []any{c}); err != nil {
 		t.Fatalf("complete: %v", err)
 	}
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 }
 
 // shown returns the words of the last Show, and its column.
@@ -338,7 +338,7 @@ func TestSupersededRequestIsDropped(t *testing.T) {
 		if _, err := p.Handlers()["complete"](context.Background(), h, []any{ctxMap(seq, "x", "")}); err != nil {
 			t.Fatal(err)
 		}
-		cmp.WaitGathering(p)
+		cmptest.Wait(p)
 	}
 	serve(5)
 	n := len(h.Calls())
@@ -438,11 +438,11 @@ func TestUpdateInfo(t *testing.T) {
 	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
 		t.Fatal(err)
 	}
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 	if _, err := p.Handlers()["select"](ctx, h, []any{"1:0"}); err != nil {
 		t.Fatal(err)
 	}
-	cmp.WaitSelecting(p)
+	cmptest.Wait(p)
 	if got["ref"] != "1:0" || got["info"] != "resolved xyz" {
 		t.Errorf("update_info got %v", got)
 	}
@@ -479,7 +479,7 @@ func TestSelectDoesNotWait(t *testing.T) {
 	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
 		t.Fatal(err)
 	}
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 	start := time.Now()
 	for _, ref := range []string{"1:0", "1:1"} {
 		if _, err := p.Handlers()["select"](ctx, h, []any{ref}); err != nil {
@@ -490,7 +490,7 @@ func TestSelectDoesNotWait(t *testing.T) {
 		t.Errorf("select waited %v for the source", d)
 	}
 	close(src.release)
-	cmp.WaitSelecting(p)
+	cmptest.Wait(p)
 	mu.Lock()
 	defer mu.Unlock()
 	if !slices.Equal(got, []string{"1:1"}) {
@@ -526,16 +526,16 @@ func TestCompleteCancelsSelect(t *testing.T) {
 	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
 		t.Fatal(err)
 	}
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 	if _, err := p.Handlers()["select"](ctx, h, []any{"1:0"}); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(2, "xa", "")}); err != nil {
 		t.Fatal(err)
 	}
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 	close(src.release)
-	cmp.WaitSelecting(p)
+	cmptest.Wait(p)
 	mu.Lock()
 	defer mu.Unlock()
 	if len(got) != 0 {
@@ -836,18 +836,18 @@ func TestSelectCancelledNotLogged(t *testing.T) {
 	if _, err := p.Handlers()["complete"](ctx, h, []any{ctxMap(1, "x", "")}); err != nil {
 		t.Fatal(err)
 	}
-	cmp.WaitGathering(p)
+	cmptest.Wait(p)
 	out := logged(t, func() {
 		for _, ref := range []string{"1:0", "1:1", "1:2"} {
 			if _, err := p.Handlers()["select"](ctx, h, []any{ref}); err != nil {
 				t.Fatal(err)
 			}
 			if ref == "1:2" {
-				cmp.WaitSelecting(p)
+				cmptest.Wait(p)
 			}
 		}
 		close(src.release)
-		cmp.WaitSelecting(p)
+		cmptest.Wait(p)
 	})
 	if strings.Contains(out, "canceled") {
 		t.Errorf("cancelled resolving logged:\n%s", out)

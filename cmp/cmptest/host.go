@@ -105,3 +105,13 @@ func toInt(v any) int {
 
 // Host must stay an sdk.Host when goda.vim changes.
 var _ sdk.Host = (*Host)(nil)
+
+// Wait waits for the work the plugin p (cmp.Builder.Plugin) goes on with
+// after a handler returned: "complete" gathers and shows the items after
+// it, and "select" resolves the item after it. A test calls it after
+// such a handler, before it looks at what the UI was given.
+func Wait(p sdk.Plugin) {
+	if w, ok := p.(interface{ Wait() }); ok {
+		w.Wait()
+	}
+}
