@@ -39,14 +39,15 @@ function! s:cache_dir() abort
   elseif has('win32') && !empty($LOCALAPPDATA)
     let base = $LOCALAPPDATA . '/vim'
   else
-    let base = expand('~/.cache/vim')
+    let base = expand('~/.cache/vim', 1)
   endif
   return base . '/goda-cmp'
 endfunction
 
 function! s:default_bin() abort
   if exists('g:goda_cmp#binary')
-    return expand(g:goda_cmp#binary)
+    " (Not 'wildignore': '*.exe' in it on Windows made it "".)
+    return expand(g:goda_cmp#binary, 1)
   endif
   return s:cache_dir() . '/goda-cmp' . (has('win32') ? '.exe' : '')
 endfunction
@@ -69,9 +70,9 @@ endfunction
 
 function! s:config_dir() abort
   if exists('g:goda_cmp#config_dir')
-    return expand(g:goda_cmp#config_dir)
+    return expand(g:goda_cmp#config_dir, 1)
   endif
-  return (has('nvim') ? stdpath('config') : expand('~/.vim')) . '/goda-cmp'
+  return (has('nvim') ? stdpath('config') : expand('~/.vim', 1)) . '/goda-cmp'
 endfunction
 
 " Build the user's config (a Go module in g:goda_cmp#config_dir) with
