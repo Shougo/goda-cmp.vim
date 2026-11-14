@@ -1,4 +1,4 @@
-" The Vim script part of examples/ddc: the hooks of a ddc.vim configuration,
+" The Vim script part of e2e/ddc: the hooks of a ddc.vim configuration,
 " translated. Use it with g:goda_cmp#config_dir pointing to a copy of this
 " directory.
 

@@ -77,14 +77,6 @@ jobs:
         env:
           GODA_CMP_PUM: ${{ github.workspace }}/pum.vim
           GOFLAGS: -mod=mod
-      - run: go vet ./...
-        working-directory: goda-cmp.vim/examples/config
-        env:
-          GOFLAGS: -mod=mod
-      - run: go vet ./...
-        working-directory: goda-cmp.vim/examples/ddc
-        env:
-          GOFLAGS: -mod=mod
 
   # Windows and macOS: vet and the tests that need no editor, shell or
   # language server (-short; those run on Linux above).

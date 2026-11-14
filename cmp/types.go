@@ -10,7 +10,7 @@
 //     ext/ui/pum uses pum.vim. A configuration adds the ones it uses.
 //
 // Extensions live in their own modules; this package only fixes the
-// interfaces. A configuration is Go code (see examples/config), so it is type
+// interfaces. A configuration is Go code (see e2e/config), so it is type
 // checked and completed by the editor like any other program.
 package cmp
 

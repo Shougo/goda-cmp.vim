@@ -50,7 +50,7 @@ Requirements: Go 1.26 or later; Vim 9.1 or later (|+job| |+channel|
    `stdpath('config')/goda-cmp` for Neovim; see |g:goda_cmp#config_dir|. >
 
 	mkdir -p ~/.vim/goda-cmp && cd ~/.vim/goda-cmp
-	cp /path/to/goda-cmp.vim/examples/config/{main.go,config.go} .
+	cp /path/to/goda-cmp.vim/e2e/config/{main.go,config.go} .
 	go mod init goda-cmp-config
 	go get github.com/Shougo/goda-cmp.vim@latest
 	go get github.com/Shougo/goda-cmp-ui-native.vim@latest
@@ -291,7 +291,7 @@ g:goda_cmp#binary
 ==============================================================================
 CONFIGURATION                                                *goda-cmp-config*
 
-The configuration is Go code; see `examples/config`.  Its shape mirrors
+The configuration is Go code; see `e2e/config`.  Its shape mirrors
 `ddc.ts`: >go
 
 	b := cmp.New()
@@ -698,7 +698,7 @@ Filters~
 			shortens long labels
 
 A configuration of all of these, translated from a ddc.vim user's, is in
-`examples/ddc` (Go, and its vimrc.vim).
+`e2e/ddc` (Go, and its vimrc.vim).
 
 ==============================================================================
 COMMAND LINE                                                *goda-cmp-cmdline*

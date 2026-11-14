@@ -81,13 +81,13 @@ func previewer(t *testing.T, dir string) bool {
 }
 
 // TestExampleConfig types into a real editor with a binary built from
-// examples/config and checks what the popup shows: Vim's own popup (the
+// e2e/config and checks what the popup shows: Vim's own popup (the
 // native UI), and the pum UI with a stand-in for pum.vim and with pum.vim.
 func TestExampleConfig(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a binary and starts an editor")
 	}
-	bin := e2e.BuildConfig(t, "../examples/config")
+	bin := e2e.BuildConfig(t, "config")
 	text := filepath.Join(t.TempDir(), "text.txt")
 	if err := os.WriteFile(text, []byte("foobar\nfoo_baz\nfoobarbaz\nzzz\n\n"), 0o644); err != nil {
 		t.Fatal(err)
@@ -456,13 +456,13 @@ func TestRealShellNative(t *testing.T) {
 	})
 }
 
-// TestExampleDDC builds examples/ddc (a translation of a ddc.vim user's
+// TestExampleDDC builds e2e/ddc (a translation of a ddc.vim user's
 // configuration) and asks the binary whether its configuration is valid.
 func TestExampleDDC(t *testing.T) {
 	if testing.Short() {
 		t.Skip("builds a binary")
 	}
-	bin := e2e.BuildConfig(t, "../examples/ddc")
+	bin := e2e.BuildConfig(t, "ddc")
 	cmd := exec.Command(bin, "--transport=jsonl")
 	cmd.Stdin = strings.NewReader(`{"id":1,"method":"cmp.status","params":[]}` + "\n")
 	out, err := cmd.Output()

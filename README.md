@@ -13,11 +13,12 @@ You need Go 1.26 or newer, and Vim 9.1 or newer (with `+job +channel +timers`)
 or Neovim 0.11 or newer. Install `Shougo/goda.vim` and `Shougo/goda-cmp.vim` (and
 `Shougo/pum.vim` for the pum popup) with your plugin manager, then create your
 configuration, a Go module of your own, outside this repository (keep it in
-your dotfiles; `examples/config` is only a template to copy):
+your dotfiles; `e2e/config`, which the tests build, is only a template to
+copy):
 
 ```sh
 mkdir -p ~/.vim/goda-cmp && cd ~/.vim/goda-cmp        # Neovim: ~/.config/nvim/goda-cmp
-cp /path/to/goda-cmp.vim/examples/config/{main.go,config.go} .
+cp /path/to/goda-cmp.vim/e2e/config/{main.go,config.go} .
 go mod init goda-cmp-config
 go get github.com/Shougo/goda-cmp.vim@latest
 go mod tidy
@@ -45,7 +46,7 @@ configuration, run-time patches, selecting candidates, the popup, writing
 extensions and partial results.
 
 A configuration translated from a ddc.vim user's `ddc.ts`, with its Vim
-script, is in [examples/ddc](examples/ddc).
+script, is in [e2e/ddc](e2e/ddc) (the tests build it).
 
 ## How it fits together
 
@@ -78,7 +79,8 @@ cd e2e && GODA_CMP_PUM=/path/to/pum.vim go test ./...   # the extensions togethe
 The end-to-end tests type into a real Vim and a real Neovim, whichever are
 installed, in a pseudo terminal (Python 3 needed), with a binary built from a
 configuration. Those of the core (`cmp`) use a test UI (`cmptest.NewUI`) and
-no extension's UI; those of the UIs, the extensions and the examples are in
+no extension's UI; those of the UIs, the extensions and the configurations
+(`e2e/config`, `e2e/ddc`) are in
 `e2e`, a module of its own that requires them (the lsp source has its own in
 goda-cmp-ext, with gopls if it is installed). The harness is the package
 `cmp/cmptest/e2e`, which extensions in other modules use too. CI
