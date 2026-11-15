@@ -82,6 +82,35 @@ and the extensions installed, and `go get -u` is not needed.  To build whenever 
 
 	autocmd BufWritePost ~/.vim/goda-cmp/*.go call goda_cmp#build()
 <
+With goda-pm.vim, to build after every update of the plugins:
+>toml
+	[[plugins]]
+	repo = 'Shougo/goda.vim'
+
+	[[plugins]]
+	repo = 'Shougo/goda-cmp.vim'
+	depends = 'goda.vim'
+	lazy = true
+	hook_post_update = 'call goda_cmp#build()'
+
+	[[plugins]]
+	repo = 'Shougo/goda-cmp-ui-native.vim'
+	depends = 'goda-cmp.vim'
+	lazy = true
+	hook_post_update = 'call goda_cmp#build()'
+
+	# The UI pum uses pum.vim.
+	[[plugins]]
+	repo = 'Shougo/pum.vim'
+	lazy = true
+
+	[[plugins]]
+	repo = 'Shougo/goda-cmp-ui-pum.vim'
+	depends = 'goda-cmp.vim'
+	lazy = true
+	hook_post_update = 'call goda_cmp#build()'
+<
+
 ==============================================================================
 FUNCTIONS                                                 *goda-cmp-functions*
 

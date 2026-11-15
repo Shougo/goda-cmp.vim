@@ -48,6 +48,40 @@ extensions and partial results.
 A configuration translated from a ddc.vim user's `ddc.ts`, with its Vim
 script, is in [e2e/ddc](e2e/ddc) (the tests build it).
 
+## With goda-pm.vim
+
+With [goda-pm.vim](https://github.com/Shougo/goda-pm.vim), the build uses
+the plugins installed (`g:goda#workspace` of goda.vim): after an update,
+build again, with no `go get -u`. To build after every update:
+
+```toml
+[[plugins]]
+repo = 'Shougo/goda.vim'
+
+[[plugins]]
+repo = 'Shougo/goda-cmp.vim'
+depends = 'goda.vim'
+lazy = true
+hook_post_update = 'call goda_cmp#build()'
+
+[[plugins]]
+repo = 'Shougo/goda-cmp-ui-native.vim'
+depends = 'goda-cmp.vim'
+lazy = true
+hook_post_update = 'call goda_cmp#build()'
+
+# The UI pum uses pum.vim.
+[[plugins]]
+repo = 'Shougo/pum.vim'
+lazy = true
+
+[[plugins]]
+repo = 'Shougo/goda-cmp-ui-pum.vim'
+depends = 'goda-cmp.vim'
+lazy = true
+hook_post_update = 'call goda_cmp#build()'
+```
+
 ## How it fits together
 
 ```
