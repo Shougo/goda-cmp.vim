@@ -423,6 +423,49 @@ func TestRealPorts(t *testing.T) {
 	})
 }
 
+// TestRealInsertShorter inserts with pum.vim an item one character shorter
+// than the one inserted before ("docs", then "doc", from the last item with
+// Ctrl-P): the popup stays, it is no backspace. A backspace typed closes
+// it.
+func TestRealInsertShorter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a binary and starts an editor")
+	}
+	bin := e2e.BuildConfig(t, "testdata/portcfg")
+	e2e.Run(t, func(t *testing.T, ed e2e.Editor) {
+		pumDir := realPum(t, ed)
+		dir := t.TempDir()
+		if err := os.WriteFile(filepath.Join(dir, "t.txt"), []byte("docs doc\n\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		steps := `[
+		  ["2GA", 0.3], ["do", 1.5], ["\u001d", 0.3],
+		  ["\u0010", 0.5], ["\u001d", 0.3], ["\u0010", 0.5], ["\u001d", 0.3],
+		  ["\u0008", 1.0], ["\u001d", 0.3],
+		  ["\u001b", 0.3]
+		]`
+		ds := drive(t, ed, pumOptions(e2e.Options{Bin: bin, File: "t.txt", Dir: dir, Steps: steps,
+			Vimrc: scenario(t), Env: []string{"GODA_PORTS=1", "GODA_INSERT=1"}}, pumDir))
+		if len(ds) < 4 {
+			t.Fatalf("got %d records, want 4", len(ds))
+		}
+		words := ds[0].Words
+		if !ds[0].Visible || len(words) < 2 {
+			t.Fatalf(`"do": %+v`, ds[0])
+		}
+		for i, d := range ds[1:3] {
+			want := words[len(words)-1-i]
+			if !d.Visible || d.Line != want {
+				t.Errorf("%s inserted: %+v", want, d)
+			}
+		}
+		// A backspace typed closes it.
+		if d := ds[3]; d.Visible || d.Line != "do" {
+			t.Errorf("after a backspace: %+v", d)
+		}
+	})
+}
+
 // TestRealShellNative completes in a terminal with zsh's own completion
 // (ext/source/shellnative).
 func TestRealShellNative(t *testing.T) {

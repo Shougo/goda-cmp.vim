@@ -156,8 +156,9 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 		// be sent as a notification; newer requests cancel older ones. The
 		// context carries the run-time patches under "patches", and may
 		// carry "options" (a patch for this request only, from
-		// goda_cmp#complete()), "hide" (close the popup first) and
-		// "update" ({name, items}: goda_cmp#update_items()).
+		// goda_cmp#complete()), "hide" (close the popup first),
+		// "backspace" (close the popup instead, see below) and "update"
+		// ({name, items}: goda_cmp#update_items()).
 		"complete": e.complete,
 		// hide(filetype, patches): close the popup.
 		"hide": e.hide,
@@ -211,7 +212,7 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 }
 
 // The keys of the context dictionary that are not Context fields.
-var requestKeys = []string{"patches", "options", "hide", "update"}
+var requestKeys = []string{"patches", "options", "hide", "backspace", "update"}
 
 func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, error) {
 	var raw map[string]any
@@ -299,8 +300,10 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 		return nil, err
 	}
 	// A change the UI made itself (selecting an item inserts it) is not
-	// typing: the UI says so (Skipper), as in ddc.vim.
-	if !c.Manual {
+	// typing: the UI says so (Skipper), as in ddc.vim. That holds for a
+	// backspace too: the item inserted may be one character shorter.
+	backspace, _ := raw["backspace"].(bool)
+	if !c.Manual || backspace {
 		if sk, ok := ui.(Skipper); ok {
 			sctx, cancel := context.WithTimeout(ctx, cfg.timeout())
 			skip, err := sdk.Guard(sctx, func() (bool, error) { return sk.SkipCompletion(sctx, h, &c) })
@@ -311,6 +314,11 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 				return nil, nil
 			}
 		}
+	}
+	// A backspace closes the popup instead of completing again
+	// (BackspaceCompletion is off).
+	if backspace {
+		return nil, e.hideUI(ctx, h, ui)
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -827,15 +835,7 @@ func (e *engine) scope(params []any) (Config, aliases, error) {
 }
 
 func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error) {
-	e.mu.Lock()
-	if e.cancel != nil {
-		e.cancel()
-		e.cancel = nil
-	}
-	e.cancelSelect()
-	e.mu.Unlock()
-	e.setVisible(false)
-	e.setLast(nil)
+	e.stop()
 	cfg, al, err := e.scope(params)
 	if err != nil {
 		return nil, err
@@ -846,6 +846,26 @@ func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error
 	}
 	e.hideShownUI(ctx, h, ui)
 	return nil, ui.Hide(ctx, h)
+}
+
+// hideUI stops the completion and closes the popup of ui.
+func (e *engine) hideUI(ctx context.Context, h sdk.Host, ui UI) error {
+	e.stop()
+	e.hideShownUI(ctx, h, ui)
+	return ui.Hide(ctx, h)
+}
+
+// stop cancels the running completion and forgets the list shown.
+func (e *engine) stop() {
+	e.mu.Lock()
+	if e.cancel != nil {
+		e.cancel()
+		e.cancel = nil
+	}
+	e.cancelSelect()
+	e.mu.Unlock()
+	e.setVisible(false)
+	e.setLast(nil)
 }
 
 // hideShownUI hides the UI that showed the last list when it is not ui (a

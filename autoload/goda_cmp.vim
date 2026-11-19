@@ -673,12 +673,17 @@ function! s:on_change(event) abort
     return
   endif
   " A backspace closes the popup instead of completing again (less
-  " flicker), unless backspaceCompletion is set.
+  " flicker), unless backspaceCompletion is set. The engine asks the UI
+  " first: selecting an item one character shorter is not a backspace.
   if !get(opts, 'backspaceCompletion', 0) && input !=# prev
         \ && strlen(input) < strlen(prev) && stridx(prev, input) == 0
         \ && strchars(prev) == strchars(input) + 1
-    call goda_cmp#hide('Backspace')
+    if s:timer != -1
+      call timer_stop(s:timer)
+    endif
     let s:last = s:key()
+    let s:accepted = []
+    call s:send(0, a:event, {'backspace': v:true})
     return
   endif
   let key = s:key()

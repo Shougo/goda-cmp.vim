@@ -418,6 +418,48 @@ func TestSkipCompletion(t *testing.T) {
 	}
 }
 
+// A backspace closes the popup instead of completing, but not when the UI
+// made the change itself: the item it inserted may be one character
+// shorter ("docs" -> "doc").
+func TestBackspace(t *testing.T) {
+	b := newBuilder()
+	b.AddSource(fakeSource{name: "a", items: []string{"doc", "docs"}})
+	b.PatchGlobal(cmp.Config{Sources: []string{"a"}, UI: "every"})
+	h := uiHost()
+	h.Funcs["goda_cmp_testui#every#show"] = func(...any) (any, error) { return nil, nil }
+	h.Funcs["goda_cmp_testui#every#hide"] = func(...any) (any, error) { return nil, nil }
+	own := true
+	h.Funcs["goda_cmp_testui#every#skip"] = func(...any) (any, error) { return own, nil }
+	count := func(fn string) int {
+		n := 0
+		for _, c := range h.Calls() {
+			if c.Fn == "goda_cmp_testui#every#"+fn {
+				n++
+			}
+		}
+		return n
+	}
+
+	c := ctxMap(1, "doc", "")
+	c["event"] = "TextChangedI"
+	c["backspace"] = true
+	complete(t, b, h, c)
+	if n := count("hide"); n != 0 {
+		t.Fatalf("hidden %d times for an item the UI inserted", n)
+	}
+	own = false
+	c = ctxMap(2, "do", "")
+	c["event"] = "TextChangedI"
+	c["backspace"] = true
+	complete(t, b, h, c)
+	if n := count("hide"); n != 1 {
+		t.Errorf("hidden %d times after a backspace, want 1", n)
+	}
+	if n := count("show"); n != 0 {
+		t.Errorf("shown %d times, want 0", n)
+	}
+}
+
 // After a source resolved an item, the engine hands it to the UI that showed
 // it (cmp.InfoUpdater); no Vim script of the core is involved.
 func TestUpdateInfo(t *testing.T) {

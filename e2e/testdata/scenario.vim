@@ -31,6 +31,11 @@ if !empty($GODA_PORTS)
         \ 'call goda_cmp#patch_buffer(#{specialBufferCompletion: v:true, sources: ["shellnative"]})'
 endif
 
+" $GODA_INSERT: Ctrl-P inserts the previous item of pum.vim (from the last).
+if !empty($GODA_INSERT)
+  inoremap <C-p> <Cmd>call pum#map#insert_relative(-1, 'loop')<CR>
+endif
+
 " $GODA_TERMINAL: completion in a terminal, with pum.vim.
 if !empty($GODA_TERMINAL)
   autocmd VimEnter * call goda_cmp#enable_terminal()
