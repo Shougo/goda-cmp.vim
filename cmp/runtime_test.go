@@ -181,6 +181,64 @@ func TestKeywordPattern(t *testing.T) {
 	}
 }
 
+// wordsSource records the Words of Text and the KeywordPattern its
+// Context gives.
+type wordsSource struct {
+	text    string
+	words   *[]string
+	pattern *string
+}
+
+func (wordsSource) Name() string { return "w" }
+
+func (s wordsSource) Gather(_ context.Context, _ sdk.Host, c *cmp.Context) (cmp.Gathered, error) {
+	*s.words = c.Words(s.text)
+	*s.pattern = c.KeywordPattern()
+	return cmp.Gathered{Start: c.KeywordStart()}, nil
+}
+
+// A source finds the words of a text by its keywordPattern.
+func TestContextWords(t *testing.T) {
+	var words []string
+	var pattern string
+	b := newBuilder()
+	b.AddSource(wordsSource{text: " M vim/rc/goda-cmp/config.go", words: &words, pattern: &pattern})
+	b.PatchGlobal(cmp.Config{Sources: []string{"w"}})
+
+	complete(t, b, uiHost(), ctxMap(1, "vim", ""))
+	if want := []string{"M", "vim", "rc", "goda", "cmp", "config", "go"}; !reflect.DeepEqual(words, want) || pattern != "" {
+		t.Errorf("default: %q %q, want %q", words, pattern, want)
+	}
+
+	p := `[0-9a-zA-Z_./#:-]*` // matches the empty string too
+	complete(t, b, uiHost(), withPatches(ctxMap(2, "vim", ""), map[string]any{
+		"buffer": map[string]any{"sourceOptions": map[string]any{
+			"_": map[string]any{"keywordPattern": p}}},
+	}))
+	if want := []string{"M", "vim/rc/goda-cmp/config.go"}; !reflect.DeepEqual(words, want) || pattern != p {
+		t.Errorf("with keywordPattern: %q %q, want %q", words, pattern, want)
+	}
+}
+
+func TestSetKeywordPattern(t *testing.T) {
+	c := &cmp.Context{Input: "cd ~/work"}
+	if err := c.SetKeywordPattern(`[~/a-z]+`); err != nil {
+		t.Fatal(err)
+	}
+	if got := c.KeywordStart(); got != 3 {
+		t.Errorf("KeywordStart = %d, want 3", got)
+	}
+	if got, want := c.Words("ls ~/a b"), []string{"ls", "~/a", "b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Words = %q, want %q", got, want)
+	}
+	if err := c.SetKeywordPattern(`(`); err == nil {
+		t.Error("a bad pattern is accepted")
+	}
+	if err := c.SetKeywordPattern(""); err != nil || c.KeywordPattern() != "" || c.KeywordStart() != 5 { // "work"
+		t.Errorf("cleared: %v %q %d", err, c.KeywordPattern(), c.KeywordStart())
+	}
+}
+
 func TestNamedSourceAndFilter(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(fakeSource{name: "a", items: []string{"one"}})

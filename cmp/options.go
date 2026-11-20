@@ -43,7 +43,8 @@ type SourceOption struct {
 	MaxItems *int `json:"maxItems"`
 	// KeywordPattern is a regular expression (Go's RE2 syntax: no lookaround)
 	// for the text before the cursor that is completed; the match must end
-	// at the cursor. Empty means letters, digits and underscores.
+	// at the cursor. Empty means letters, digits and underscores. A source
+	// finds the words of a text by it too (Context.Words).
 	KeywordPattern string `json:"keywordPattern"`
 	// ForceCompletionPattern is a regular expression (RE2) for the text
 	// before the cursor; the match must end at the cursor. When it

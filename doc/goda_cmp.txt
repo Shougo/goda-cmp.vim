@@ -423,7 +423,9 @@ Source options (`SourceOptions`, ddc.vim's ddc-source-options):
 	MinKeywordLength	items with shorter words are dropped
 	MaxKeywordLength	and with longer ones (default 0: no limit)
 	MaxItems		items kept after sorting (default 100)
-	KeywordPattern		the text completed, before the cursor
+	KeywordPattern		the text completed, before the cursor, and
+				the words of a buffer for the sources that
+				read them (`Context.Words()`: around, buffer)
 	ForceCompletionPattern	when it matches, the lengths do not apply
 	IgnoreCase		for the matchers (`FilterInput.IgnoreCase`)
 	MatcherKey		the item attribute the matchers compare:

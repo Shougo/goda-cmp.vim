@@ -17,6 +17,7 @@ package cmp
 import (
 	"context"
 	"regexp"
+	"strings"
 	"unicode"
 	"unicode/utf8"
 
@@ -53,8 +54,58 @@ type Context struct {
 	// it.
 	Event string `json:"event"`
 
-	// keyword is the source's keywordPattern, anchored at the end of Input.
+	// keyword is the source's keywordPattern, anchored at the end of Input;
+	// words is the same not anchored, and pattern its text.
 	keyword *regexp.Regexp
+	words   *regexp.Regexp
+	pattern string
+}
+
+// SetKeywordPattern sets the keywordPattern option of the source the
+// Context is for, as the engine does before Source.Gather (a test of a
+// source uses it).
+func (c *Context) SetKeywordPattern(pattern string) error {
+	if pattern == "" {
+		c.keyword, c.words, c.pattern = nil, nil, ""
+		return nil
+	}
+	keyword, err := keywordRegexp(pattern)
+	if err != nil {
+		return err
+	}
+	words, err := regexp.Compile(pattern)
+	if err != nil {
+		return err
+	}
+	c.keyword, c.words, c.pattern = keyword, words, pattern
+	return nil
+}
+
+// KeywordPattern returns the source's keywordPattern option, "" when none
+// is set. A source caching the words of a text (see Words) keys the cache
+// by it.
+func (c *Context) KeywordPattern() string { return c.pattern }
+
+// Words returns the words of text, in order and with duplicates: the
+// matches of the source's keywordPattern option when one is set (empty ones
+// dropped), and Words(text) otherwise.
+func (c *Context) Words(text string) []string {
+	if c.words == nil {
+		return Words(text)
+	}
+	var words []string
+	for _, w := range c.words.FindAllString(text, -1) {
+		if w != "" {
+			words = append(words, w)
+		}
+	}
+	return words
+}
+
+// Words is the default notion of the words of text: the runs of letters,
+// digits and underscores (see KeywordStart).
+func Words(text string) []string {
+	return strings.FieldsFunc(text, func(r rune) bool { return !isWord(r) })
 }
 
 // KeywordStart returns the byte offset in Input where the word under the

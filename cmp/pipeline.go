@@ -299,7 +299,12 @@ func (r *runner) gatherOne(ctx context.Context, i int) {
 			log.Printf("cmp: source %s: %v", name, err)
 			return
 		}
-		sc.keyword = re
+		words, err := e.pattern(opt.KeywordPattern)
+		if err != nil {
+			log.Printf("cmp: source %s: %v", name, err)
+			return
+		}
+		sc.keyword, sc.words, sc.pattern = re, words, opt.KeywordPattern
 	}
 	pattern := func(what, p string) *regexp.Regexp {
 		if p == "" {
