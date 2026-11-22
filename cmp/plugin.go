@@ -521,18 +521,16 @@ func (e *engine) setLast(l *lastList) {
 // notifyItems tells the core Vim script what is shown, for the
 // goda_cmp#map#*() functions (its own script: no extension is called).
 func (e *engine) notifyItems(ctx context.Context, h sdk.Host, c *Context, col int, items []Item, sources []string) {
-	list := []any{}
-	for _, it := range items {
-		if m, err := sdk.Generic(it); err == nil {
-			list = append(list, m)
-		}
+	// The items as they are: the host converts them (sdk.Generic on
+	// Neovim, JSON on Vim), once for all of them. (Empty lists, not null.)
+	if items == nil {
+		items = []Item{}
 	}
-	srcs := []any{}
-	for _, s := range sources {
-		srcs = append(srcs, s)
+	if sources == nil {
+		sources = []string{}
 	}
 	if err := h.Notify(ctx, "goda_cmp#_items", map[string]any{
-		"seq": c.Seq, "col": col, "items": list, "sources": srcs,
+		"seq": c.Seq, "col": col, "items": items, "sources": sources,
 	}); err != nil && ctx.Err() == nil {
 		log.Printf("cmp: goda_cmp#_items: %v", err)
 	}
