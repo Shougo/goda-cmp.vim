@@ -29,51 +29,8 @@ let s:filetype_patch = {}
 " ---------------------------------------------------------------------------
 " Setup
 
-" The binary is machine specific, so it is not built into the configuration
-" directory (which belongs in your dotfiles) but into a cache directory.
-function! s:cache_dir() abort
-  if has('nvim')
-    let base = stdpath('cache')
-  elseif !empty($XDG_CACHE_HOME)
-    let base = $XDG_CACHE_HOME . '/vim'
-  elseif has('win32') && !empty($LOCALAPPDATA)
-    let base = $LOCALAPPDATA . '/vim'
-  else
-    let base = expand('~/.cache/vim', 1)
-  endif
-  return base . '/goda-cmp'
-endfunction
-
-function! s:default_bin() abort
-  if exists('g:goda_cmp#binary')
-    " (Not 'wildignore': '*.exe' in it on Windows made it "".)
-    return expand(g:goda_cmp#binary, 1)
-  endif
-  return s:cache_dir() . '/goda-cmp' . (has('win32') ? '.exe' : '')
-endfunction
-
-" The options of goda#register(): the version of the Vim script, and how to
-" build the binary when there is none or it is of another version (goda.vim
-" builds it then). Not for the binary of g:goda_cmp#binary: the user builds it.
-function! s:register_opts() abort
-  if exists('g:goda_cmp#binary')
-    return s:version
-  endif
-  return extend(#{build: function('s:build_binary'), bin: s:default_bin()}, s:version)
-endfunction
-
-" The build of the binary for goda.vim, as it starts it (nothing else: it
-" is not running).
-function! s:build_binary() abort
-  call goda#build(#{name: 'cmp', dir: s:config_dir(), bin: s:default_bin()})
-endfunction
-
-function! s:config_dir() abort
-  if exists('g:goda_cmp#config_dir')
-    return expand(g:goda_cmp#config_dir, 1)
-  endif
-  return (has('nvim') ? stdpath('config') : expand('~/.vim', 1)) . '/goda-cmp'
-endfunction
+" (s:start() asks "status" itself: a binary from before cmp.status has none.)
+let s:goda = goda#configured#new('cmp', extend(#{status: v:false}, s:version))
 
 " Build the user's config (a Go module in g:goda_cmp#config_dir) with
 " goda#build(): with the plugins installed (g:goda#workspace). Needs Go.
@@ -92,7 +49,7 @@ function! goda_cmp#build() abort
   let was_enabled = exists('s:enabled')
   call goda_cmp#disable()
   try
-    call goda#build(#{name: 'cmp', dir: s:config_dir(), bin: s:default_bin()})
+    call s:goda.build()
   finally
     if was_enabled
       call goda_cmp#enable()
@@ -108,15 +65,15 @@ function! goda_cmp#enable() abort
   if exists('s:enabled')
     return
   endif
-  if !executable(s:default_bin())
+  if !executable(s:goda.binary())
     " Not an error: this is what the first start looks like.
     echohl WarningMsg
-    echomsg 'goda-cmp: ' . s:default_bin() . ' does not exist yet; build it with: call goda_cmp#build()'
+    echomsg 'goda-cmp: ' . s:goda.binary() . ' does not exist yet; build it with: call goda_cmp#build()'
     echohl None
     return
   endif
   " (Again after a build: a start that failed is tried again.)
-  call goda#register('cmp', function('s:start'), s:register_opts())
+  call s:goda.register(function('s:start'))
   silent! unlet s:boot_failed
   let s:enabled = 1
   let s:registered = {}
@@ -145,19 +102,7 @@ endfunction
 " and no binary serves it (not started yet, stopped, or exited). Then the
 " events of the configuration are listened to.
 function! s:start() abort
-  let bin = s:default_bin()
-  if !executable(bin)
-    throw 'goda-cmp: ' . bin . ' does not exist yet; build it with: call goda_cmp#build()'
-  endif
-  let plugins = goda#start(bin)
-  if index(plugins, 'cmp') < 0
-    " Stop only the binary just started (through one of its plugins), not
-    " the binaries of other plugins.
-    if !empty(plugins)
-      call goda#stop(plugins[0])
-    endif
-    throw 'goda-cmp: ' . bin . ' does not contain the "cmp" plugin'
-  endif
+  call s:goda.start()
   " A binary built from an invalid configuration starts anyway and says why.
   try
     let status = goda#request('cmp', 'status')
@@ -166,7 +111,7 @@ function! s:start() abort
   endtry
   if type(status) == v:t_string && status !=# ''
     call goda#stop('cmp')
-    throw 'goda-cmp: fix the configuration in ' . s:config_dir()
+    throw 'goda-cmp: fix the configuration in ' . s:goda.config_dir()
           \ . ' and run goda_cmp#build(): ' . status
   endif
   if exists('s:enabled')
