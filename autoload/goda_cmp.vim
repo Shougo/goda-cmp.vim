@@ -9,7 +9,7 @@
 " The version of this Vim script that the binary goes with (ScriptVersion of
 " its Go side): goda.vim refuses a binary of another one, and says to build
 " it again. Bumped with it when they no longer work together.
-let s:version = #{version: 1, module: 'github.com/Shougo/goda-cmp.vim'}
+let s:version = #{version: 2, module: 'github.com/Shougo/goda-cmp.vim'}
 
 let s:seq = 0
 let s:timer = -1
@@ -350,7 +350,7 @@ endfunction
 
 function! s:check(config, scope) abort
   if goda#is_running('cmp')
-    call goda#request('cmp', 'validate', a:config, s:aliases, a:scope)
+    call goda#request('cmp', 'validate', a:config, a:scope)
   endif
 endfunction
 
@@ -406,24 +406,6 @@ function! goda_cmp#get_current() abort
   return goda#request('cmp', 'current', s:filetype(), s:patches())
 endfunction
 
-" Give the extension {base} of {type} ("source", "filter" or "ui") another
-" name, under which it can have options and params of its own, as
-" ddc#custom#alias().
-function! goda_cmp#alias(type, alias, base) abort
-  if index(['source', 'filter', 'ui'], a:type) < 0
-    throw 'goda-cmp: the type of an alias is "source", "filter" or "ui", not ' . string(a:type)
-  endif
-  let aliases = deepcopy(s:aliases)
-  let aliases[a:type][a:alias] = a:base
-  if goda#is_running('cmp')
-    call goda#request('cmp', 'validate', {}, aliases, 'global')
-  endif
-  let s:aliases = aliases
-  let s:opts = {}
-endfunction
-
-let s:aliases = {'source': {}, 'filter': {}, 'ui': {}}
-
 " What the plugin needs to resolve the settings of this buffer.
 function! s:patches(...) abort
   let ft = a:0 ? a:1 : s:filetype()
@@ -434,7 +416,7 @@ function! s:patches(...) abort
     endif
   endfor
   return {'global': s:global_patch, 'filetype': fts,
-        \ 'buffer': get(b:, 'goda_cmp_patch', {}), 'aliases': s:aliases}
+        \ 'buffer': get(b:, 'goda_cmp_patch', {})}
 endfunction
 
 " ---------------------------------------------------------------------------
@@ -468,7 +450,7 @@ function! s:filetype() abort
     return &filetype
   endif
   let patches = {'global': s:global_patch, 'filetype': {},
-        \ 'buffer': get(b:, 'goda_cmp_patch', {}), 'aliases': s:aliases}
+        \ 'buffer': get(b:, 'goda_cmp_patch', {})}
   let how = get(s:request_options('', patches), 'contextFiletype', 'none')
   if how ==# 'context_filetype'
     if exists('*context_filetype#get_filetype')

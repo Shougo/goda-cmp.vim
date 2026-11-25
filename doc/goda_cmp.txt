@@ -189,19 +189,6 @@ goda_cmp#get_current()
 		The configuration in effect for the current buffer: the Go
 		and Vim script settings together.
 
-                                                            *goda_cmp#alias()*
-goda_cmp#alias({type}, {alias}, {base})
-		Name the extension {base} of {type} ("source", "filter" or
-		"ui") also {alias}, as ddc#custom#alias().  The alias can
-		have options and params of its own: >vim
-
-	call goda_cmp#alias('source', 'around_long', 'around')
-	call goda_cmp#patch_global(#{
-	      \   sources: ['around', 'around_long'],
-	      \   sourceParams: #{ around_long: #{ minLength: 10 } },
-	      \   sourceOptions: #{ around_long: #{ mark: 'A+' } },
-	      \ })
-<
                                                   *goda_cmp#enable_terminal()*
 goda_cmp#enable_terminal()
 		Complete in terminal buffers too; see |goda-cmp-terminal|.
@@ -347,6 +334,22 @@ merged by key, slices are replaced.  Options named "_" are inherited by every
 source.  A name used but never added is reported when the binary starts.
 Nothing is built in: even the popup is an extension, and `UI` must name one
 that was added (there is no default).
+
+An extension can have another name too, with options and params of its own,
+as ddc#custom#alias() (`AddFilterAlias` and `AddUIAlias` are the same for
+filters and UIs): >go
+
+	b.AddSourceAlias("around_long", "around")
+	b.PatchGlobal(cmp.Config{
+	    Sources: []string{"around", "around_long"},
+	    SourceParams: map[string]cmp.Params{
+	        "around_long": {"minLength": 10},
+	    },
+	    SourceOptions: map[string]cmp.SourceOption{
+	        "around_long": {Mark: "A+"},
+	    },
+	})
+<
 
 Settings are those of ddc.vim, with the same names in Vim script
 (`sourceOptions`, `autoCompleteEvents`, ...).  Where goda-cmp differs, it says

@@ -1,4 +1,4 @@
-" For TestRealFunctions: the functions for mappings, aliases and params from
+" For TestRealFunctions: the functions for mappings, params of an alias from
 " Vim script, and contextFiletype.
 inoremap <expr> <C-x>1 goda_cmp#map#insert_item(0)
 inoremap <expr> <C-x>2 goda_cmp#map#complete_common_string()
@@ -10,8 +10,8 @@ function! DumpCurrent() abort
   return ''
 endfunction
 inoremap <C-x>3 <Cmd>call DumpCurrent()<CR>
-" words2: words with params of its own, its duplicates kept.
-call goda_cmp#alias('source', 'words2', 'words')
+" words2 (an alias of the configuration, testdata/funcscfg): words with
+" params of its own, its duplicates kept.
 call goda_cmp#patch_global({
       \ 'sources': ['words', 'words2'],
       \ 'sourceParams': {'words2': {'minLength': 9}},

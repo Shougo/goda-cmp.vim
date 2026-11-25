@@ -11,6 +11,7 @@ func main() {
 	b := cmp.New()
 	b.AddUI(cmptest.NewUI("test", "i", "c", "t"))
 	b.AddSource(cmptest.NewWords(cmptest.WordsParams{}))
+	b.AddSourceAlias("words2", "words")
 	b.AddFilter(cmptest.NewHead())
 	b.PatchGlobal(cmp.Config{
 		UI:                "test",

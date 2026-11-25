@@ -367,8 +367,8 @@ qa!
 }
 
 // TestRealFunctions: goda_cmp#map#insert_item() and
-// goda_cmp#map#complete_common_string(), an alias with params of its own set
-// from Vim script, goda_cmp#get_current() and goda_cmp#visible(), and
+// goda_cmp#map#complete_common_string(), an alias of the configuration with
+// params of its own set from Vim script, goda_cmp#get_current() and goda_cmp#visible(), and
 // contextFiletype "treesitter" (Neovim) in a real editor.
 func TestRealFunctions(t *testing.T) {
 	if testing.Short() {

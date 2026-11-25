@@ -376,6 +376,8 @@ func TestParamsAndAliases(t *testing.T) {
 	b := newBuilder()
 	b.AddSource(src)
 	b.AddSource(fakeSource{name: "plain", items: []string{"x"}})
+	b.AddSourceAlias("param2", "param")
+	b.AddSourceAlias("other", "plain")
 	b.PatchGlobal(cmp.Config{Sources: []string{"param"}})
 	p, err := b.Plugin()
 	if err != nil {
@@ -400,9 +402,9 @@ func TestParamsAndAliases(t *testing.T) {
 	if !reflect.DeepEqual(w, []string{"ccc"}) {
 		t.Errorf("params from Vim: %q", w)
 	}
-	// An alias with params of its own, next to the source.
+	// An alias (of the configuration) with params of its own, next to the
+	// source.
 	w = run(map[string]any{
-		"aliases": map[string]any{"source": map[string]any{"param2": "param"}},
 		"global": map[string]any{
 			"sources":      []any{"param", "param2"},
 			"sourceParams": map[string]any{"param2": map[string]any{"word": "az"}},
@@ -414,19 +416,15 @@ func TestParamsAndAliases(t *testing.T) {
 
 	// Errors, through validate.
 	for _, tc := range []struct {
-		config, aliases map[string]any
-		want            string
+		config map[string]any
+		want   string
 	}{
-		{map[string]any{"sourceParams": map[string]any{"param": map[string]any{"nope": 1}}}, nil, `unknown field "nope"`},
-		{map[string]any{"sourceParams": map[string]any{"plain": map[string]any{"x": 1}}}, nil, "takes no params"},
-		{map[string]any{"sources": []any{"other"}}, map[string]any{"source": map[string]any{"other": "plain"}}, ""},
-		{map[string]any{}, map[string]any{"source": map[string]any{"bad": "missing"}}, `unknown source "missing"`},
+		{map[string]any{"sourceParams": map[string]any{"param": map[string]any{"nope": 1}}}, `unknown field "nope"`},
+		{map[string]any{"sourceParams": map[string]any{"plain": map[string]any{"x": 1}}}, "takes no params"},
+		{map[string]any{"sources": []any{"other"}}, ""},
+		{map[string]any{"sources": []any{"nosuch"}}, `unknown source "nosuch"`},
 	} {
-		args := []any{tc.config}
-		if tc.aliases != nil {
-			args = append(args, tc.aliases)
-		}
-		_, err := p.Handlers()["validate"](context.Background(), nil, args)
+		_, err := p.Handlers()["validate"](context.Background(), nil, []any{tc.config, "global"})
 		if tc.want == "" {
 			if err != nil {
 				t.Errorf("%v: %v", tc.config, err)
@@ -453,11 +451,11 @@ func TestContextFiletypeScope(t *testing.T) {
 	if err != nil || opts.(map[string]any)["contextFiletype"] != "treesitter" {
 		t.Errorf("options = %v, %v", opts, err)
 	}
-	_, err = p.Handlers()["validate"](context.Background(), nil, []any{map[string]any{"contextFiletype": "none"}, nil, "filetype"})
+	_, err = p.Handlers()["validate"](context.Background(), nil, []any{map[string]any{"contextFiletype": "none"}, "filetype"})
 	if err == nil {
 		t.Error("contextFiletype in a filetype patch must be an error")
 	}
-	if _, err := p.Handlers()["validate"](context.Background(), nil, []any{map[string]any{"contextFiletype": "none"}, nil, "buffer"}); err != nil {
+	if _, err := p.Handlers()["validate"](context.Background(), nil, []any{map[string]any{"contextFiletype": "none"}, "buffer"}); err != nil {
 		t.Errorf("buffer: %v", err)
 	}
 }
@@ -540,3 +538,21 @@ func TestAutoCompleteEventsAndPreviewOption(t *testing.T) {
 }
 
 var _ = cmptest.Host{}
+
+// An alias of an extension that is not there is an error of the
+// configuration, as one made twice.
+func TestAliasErrors(t *testing.T) {
+	b := newBuilder()
+	b.AddSource(fakeSource{name: "plain", items: []string{"x"}})
+	b.AddSourceAlias("bad", "missing")
+	b.AddFilterAlias("f", "nofilter")
+	b.AddUIAlias("u", "noui")
+	b.AddSourceAlias("twice", "plain").AddSourceAlias("twice", "plain")
+	err := b.Validate()
+	for _, want := range []string{`alias "bad": unknown source "missing"`, `alias "f": unknown filter "nofilter"`,
+		`alias "u": unknown ui "noui"`, `source alias "twice" made twice`} {
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("err = %v, want %q", err, want)
+		}
+	}
+}

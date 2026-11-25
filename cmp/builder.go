@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"regexp"
 	"slices"
 	"strings"
+	"regexp"
 
 	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
@@ -27,6 +27,9 @@ type Builder struct {
 	filters     map[string]Filter
 	uis         map[string]UI
 
+	// aliases are those of AddSourceAlias, AddFilterAlias and AddUIAlias.
+	aliases aliases
+
 	global Config
 	ft     map[string]Config
 	errs   []string
@@ -39,6 +42,7 @@ func New() *Builder {
 		sources: map[string]Source{},
 		filters: map[string]Filter{},
 		uis:     map[string]UI{},
+		aliases: aliases{Source: map[string]string{}, Filter: map[string]string{}, UI: map[string]string{}},
 		global:  defaultConfig(),
 		ft:      map[string]Config{},
 	}
@@ -75,6 +79,39 @@ func (b *Builder) AddUI(u UI) *Builder {
 	}
 	b.uis[u.Name()] = u
 	return b
+}
+
+// AddSourceAlias names the source base also alias, as ddc#custom#alias():
+// the alias has options and params of its own (sourceOptions and
+// sourceParams under the alias), next to base:
+//
+//	b.AddSourceAlias("around_long", "around")
+//	b.PatchGlobal(cmp.Config{
+//		Sources:      []string{"around", "around_long"},
+//		SourceParams: map[string]cmp.Params{"around_long": {"minLength": 10}},
+//	})
+func (b *Builder) AddSourceAlias(alias, base string) *Builder {
+	b.addAlias(b.aliases.Source, "source", alias, base)
+	return b
+}
+
+// AddFilterAlias names the filter base also alias, as AddSourceAlias.
+func (b *Builder) AddFilterAlias(alias, base string) *Builder {
+	b.addAlias(b.aliases.Filter, "filter", alias, base)
+	return b
+}
+
+// AddUIAlias names the UI base also alias, as AddSourceAlias.
+func (b *Builder) AddUIAlias(alias, base string) *Builder {
+	b.addAlias(b.aliases.UI, "ui", alias, base)
+	return b
+}
+
+func (b *Builder) addAlias(m map[string]string, kind, alias, base string) {
+	if _, dup := m[alias]; dup {
+		b.fail("%s alias %q made twice", kind, alias)
+	}
+	m[alias] = base
 }
 
 // PatchGlobal merges c into the configuration used for every filetype.
@@ -267,7 +304,7 @@ func hasCmdlineSources(cfg Config) bool {
 func (b *Builder) Validate() error {
 	errs := append([]string{}, b.errs...)
 	errs = append(errs, b.checkEvents()...)
-	errs = append(errs, b.checkConfig("global", b.global, aliases{}, false)...)
+	errs = append(errs, b.checkConfig("global", b.global, b.aliases, false)...)
 	if b.global.UI == "" {
 		errs = append(errs, `global: no ui is set: add one (b.AddUI(native.New()), see ext/ui) and set Config.UI to its name`)
 	}
@@ -276,7 +313,7 @@ func (b *Builder) Validate() error {
 		errs = append(errs, b.checkCmdlineUI("filetype "+ft, merge(b.global, c))...)
 	}
 	for ft, c := range b.ft {
-		errs = append(errs, b.checkConfig("filetype "+ft, c, aliases{}, true)...)
+		errs = append(errs, b.checkConfig("filetype "+ft, c, b.aliases, true)...)
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("goda-cmp configuration:\n  %s", joinErrs(errs))

@@ -146,7 +146,7 @@ func (e *engine) Name() string { return PluginName }
 // binary goes with (sdk.ScriptVersioner): goda.vim refuses a binary of
 // another one and says to build it again. Bump it with s:version there when
 // the Vim script and the binary no longer work together.
-const ScriptVersion = 1
+const ScriptVersion = 2
 
 func (e *engine) ScriptVersion() int { return ScriptVersion }
 
@@ -196,8 +196,8 @@ func (e *engine) Handlers() map[string]sdk.Handler {
 		// an invalid configuration still starts and answers this, so that
 		// the Vim side can show the error (see Builder.Main).
 		"status": func(context.Context, sdk.Host, []any) (any, error) { return "", nil },
-		// validate(config, aliases): checks a patch the Vim side is about
-		// to store.
+		// validate(config, scope): checks a patch the Vim side is about
+		// to store, of the scope "global", "filetype" or "buffer".
 		"validate": e.validate,
 		// sources() -> sorted names, for diagnostics.
 		"sources": func(context.Context, sdk.Host, []any) (any, error) {
@@ -251,7 +251,7 @@ func (e *engine) complete(ctx context.Context, h sdk.Host, params []any) (any, e
 			return nil, nil // nothing to update: no completion either
 		}
 	}
-	al := rt.aliases
+	al := e.b.aliases
 	cfg := e.b.resolve(c.Filetype, rt)
 	if cfg.DynamicConfig != nil {
 		patch, err := sdk.Guard(ctx, func() (Config, error) {
@@ -829,7 +829,7 @@ func (e *engine) scope(params []any) (Config, aliases, error) {
 	if err != nil {
 		return Config{}, aliases{}, err
 	}
-	return e.b.resolve(ft, rt), rt.aliases, nil
+	return e.b.resolve(ft, rt), e.b.aliases, nil
 }
 
 func (e *engine) hide(ctx context.Context, h sdk.Host, params []any) (any, error) {
@@ -966,23 +966,17 @@ func (e *engine) showLast(ctx context.Context, h sdk.Host, params []any) (any, e
 }
 
 func (e *engine) validate(_ context.Context, _ sdk.Host, params []any) (any, error) {
-	// The third argument is the scope of the patch: "global", "filetype"
-	// or "buffer".
-	var rawCfg, rawAliases any
+	var rawCfg any
 	var scope string
-	if err := sdk.DecodeArgs(params, &rawCfg, sdk.Optional(&rawAliases), sdk.Optional(&scope)); err != nil {
+	if err := sdk.DecodeArgs(params, &rawCfg, sdk.Optional(&scope)); err != nil {
 		return nil, fmt.Errorf("cmp.validate needs a config dictionary: %w", err)
 	}
 	cfg, err := decodeConfig(rawCfg)
 	if err != nil {
 		return nil, err
 	}
-	al, err := decodeAliases(rawAliases)
-	if err != nil {
-		return nil, err
-	}
 	filetype := scope == "filetype"
-	if errs := e.b.checkConfig("config", cfg, al, filetype); len(errs) > 0 {
+	if errs := e.b.checkConfig("config", cfg, e.b.aliases, filetype); len(errs) > 0 {
 		return nil, fmt.Errorf("%s", joinErrs(errs))
 	}
 	return nil, nil

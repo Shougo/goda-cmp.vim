@@ -433,16 +433,15 @@ type patches struct {
 	Global   Config
 	Filetype map[string]Config
 	Buffer   Config
-	// aliases are the names made with goda_cmp#alias().
-	aliases aliases
 	// Manual is laid over everything else: the options of
 	// goda_cmp#complete({options}).
 	Manual Config
 }
 
-// aliases are names given to extensions from Vim script, as ddc#custom#alias()
-// does: an alias is the extension it names, with parameters of its own
-// (sourceParams and so on, under the alias).
+// aliases are names given to extensions in the configuration
+// (Builder.AddSourceAlias, ...), as ddc#custom#alias() does: an alias is the
+// extension it names, with parameters of its own (sourceParams and so on,
+// under the alias).
 type aliases struct {
 	Source map[string]string `json:"source"`
 	Filter map[string]string `json:"filter"`
@@ -465,8 +464,6 @@ func decodePatches(v any) (patches, error) {
 			p.Global, err = decodeConfig(val)
 		case "buffer":
 			p.Buffer, err = decodeConfig(val)
-		case "aliases":
-			p.aliases, err = decodeAliases(val)
 		case "manual":
 			p.Manual, err = decodeConfig(val)
 		case "filetype":
@@ -491,20 +488,3 @@ func decodePatches(v any) (patches, error) {
 }
 
 func joinErrs(errs []string) string { return strings.Join(errs, "\n  ") }
-
-func decodeAliases(v any) (aliases, error) {
-	var a aliases
-	if v == nil {
-		return a, nil
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return a, err
-	}
-	dec := json.NewDecoder(bytes.NewReader(b))
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&a); err != nil {
-		return aliases{}, fmt.Errorf("aliases: %w", err)
-	}
-	return a, nil
-}
