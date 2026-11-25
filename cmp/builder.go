@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"regexp"
 	"slices"
 	"strings"
-	"regexp"
 
 	"github.com/Shougo/goda.vim/host"
 	"github.com/Shougo/goda.vim/sdk"
