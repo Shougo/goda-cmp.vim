@@ -88,3 +88,10 @@ if !empty($GODA_VIMRC)
   source $GODA_VIMRC
 endif
 autocmd VimEnter * call goda_cmp#enable()
+
+" At the end, the log of goda.vim, which Drive checks is empty: an error in
+" a notification is only there.
+augroup goda_cmp_e2e_log
+  autocmd!
+  autocmd VimLeavePre * if exists('*goda#log') | call writefile(goda#log(), $GODA_LOG) | endif
+augroup END

@@ -1,6 +1,7 @@
 package e2e
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -204,7 +205,8 @@ type Options struct {
 
 // Drive starts ed in a pseudo terminal (with python3; the test is skipped
 // without it), types the steps, and returns the records written to
-// $GODA_OUT.
+// $GODA_OUT.  The log of goda.vim (goda#log()) must be empty when the
+// editor quits: an error in a notification is only there.
 func Drive(t testing.TB, ed Editor, o Options) []Dump {
 	t.Helper()
 	if _, err := exec.LookPath("python3"); err != nil {
@@ -217,14 +219,18 @@ func Drive(t testing.TB, ed Editor, o Options) []Dump {
 		t.Fatal(err)
 	}
 	out := filepath.Join(dir, "out.jsonl")
+	logFile := filepath.Join(dir, "log.txt")
 	cmd := exec.Command("python3", "-I", filepath.Join(dir, "drive.py"), ed.Bin, filepath.Join(dir, "vimrc.vim"), o.File, o.Steps)
 	cmd.Dir = o.Dir
 	cmd.Env = append(append(os.Environ(),
 		"GODA_RTP="+godaRoot, "GODA_CMP_RTP="+repo, "GODA_TESTUI_RTP="+filepath.Join(dir, "testui"),
 		"GODA_EXTRA_RTP="+strings.Join(o.RTP, ","), "GODA_VIMRC="+o.Vimrc,
-		"GODA_CMP_BIN="+o.Bin, "GODA_OUT="+out), o.Env...)
+		"GODA_CMP_BIN="+o.Bin, "GODA_OUT="+out, "GODA_LOG="+logFile), o.Env...)
 	if b, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("driver: %v\n%s", err, b)
+	}
+	if b, err := os.ReadFile(logFile); err == nil && len(bytes.TrimSpace(b)) > 0 {
+		t.Errorf("the log of goda.vim:\n%s", b)
 	}
 	raw, err := os.ReadFile(out)
 	if err != nil {
