@@ -5,16 +5,19 @@ A successor in spirit to ddc.vim: sources and filters are separate extensions,
 the popup is either Vim's native one or [pum.vim](https://github.com/Shougo/pum.vim),
 and the configuration is code — a small Go program you own.
 
-Status: early. See "Not implemented".
+Before 1.0.0, a change that breaks extensions or configurations is made only
+in a minor version and said in its release; see `:help goda-cmp-compatibility`.
 
 ## Try it
 
 You need Go 1.26 or newer, and Vim 9.1 or newer (with `+job +channel +timers`)
-or Neovim 0.11 or newer. Install `Shougo/goda.vim` and `Shougo/goda-cmp.vim` (and
-`Shougo/pum.vim` for the pum popup) with your plugin manager, then create your
-configuration, a Go module of your own, outside this repository (keep it in
-your dotfiles; `e2e/config`, which the tests build, is only a template to
-copy):
+or Neovim 0.11 or newer. Install `Shougo/goda.vim`, `Shougo/goda-cmp.vim` and
+the UIs `Shougo/goda-cmp-ui-native.vim` and `Shougo/goda-cmp-ui-pum.vim` (the
+UIs are plugins of their own, as in ddc.vim; the template below has both, and
+`Shougo/pum.vim` is needed for the pum popup) with your plugin manager, then
+create your configuration, a Go module of your own, outside this repository
+(keep it in your dotfiles; `e2e/config`, which the tests build, is only a
+template to copy):
 
 ```sh
 mkdir -p ~/.vim/goda-cmp && cd ~/.vim/goda-cmp        # Neovim: ~/.config/nvim/goda-cmp
